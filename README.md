@@ -5,7 +5,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 First, run the development server:
 
 ```bash
-npm run dev
+npm install    # ← читает package.json и скачивает все библиотеки в node_modules
+npm run dev    # ← теперь запустится
 # or
 yarn dev
 # or
