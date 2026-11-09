@@ -79,8 +79,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --font-display: "Old Standard TT", Georgia, "Times New Roman", serif;
-  --font-body: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-display: var(--font-journal-display, "Old Standard TT"), Georgia, "Times New Roman", serif;
+  --font-body: var(--font-journal-body, "Cormorant Garamond"), Georgia, "Times New Roman", serif;
 
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);

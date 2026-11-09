@@ -2,10 +2,10 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect } from 'react'
-import { createCycle, setCycleStatus, saveWindows, renameCycle } from './actions'
+import { saveWindows } from './actions'
 import {
-  Loader2, Plus, CalendarDays, AlertCircle, CheckCircle2, X,
-  ChevronDown, ChevronUp, Ban, Play, Save, RotateCcw, Pencil,
+  Loader2, CalendarDays, AlertCircle, CheckCircle2,
+  ChevronDown, ChevronUp, Save,
 } from 'lucide-react'
 
 /* ── Типы ── */
@@ -14,6 +14,7 @@ type WindowRow = { stage: string; starts_on: string; ends_on: string }
 type Draft = Record<string, { starts_on: string; ends_on: string }>
 
 const STAGES = [
+  { key: 'applications', label: 'Каталогъ и подача' },
   { key: 'bibliography', label: 'Библиография' },
   { key: 'screening1', label: 'Просмотръ №1' },
   { key: 'screening2', label: 'Просмотръ №2' },
@@ -79,21 +80,6 @@ function Collapse({ open, children }: { open: boolean; children: React.ReactNode
   )
 }
 
-function JournalInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <div className="relative">
-      <input
-        {...props}
-        className={`peer w-full h-11 bg-[#FAF5E8] border border-input px-3.5 pb-1 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 disabled:opacity-50 placeholder:text-muted-foreground/50 ${props.className ?? ''}`}
-      />
-      <span
-        className="absolute bottom-0 left-0 h-[2px] w-full origin-left scale-x-0 bg-gradient-to-r from-[#C9A45C] to-[#8A6B2F] transition-transform duration-500 ease-out peer-focus:scale-x-100"
-        aria-hidden
-      />
-    </div>
-  )
-}
-
 /* ── Выбор даты в общем стиле ── */
 function JournalDate(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
@@ -102,14 +88,6 @@ function JournalDate(props: React.InputHTMLAttributes<HTMLInputElement>) {
       type="date"
       className={`peer w-full h-11 bg-[#FAF5E8] border border-input px-3 text-sm text-foreground outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 disabled:opacity-50 [color-scheme:light] ${props.className ?? ''}`}
     />
-  )
-}
-
-function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
-  return (
-    <label htmlFor={htmlFor} className="block text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-      {children}
-    </label>
   )
 }
 
@@ -144,25 +122,15 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-export default function DeputyCyclesPage() {
+export default function DeputyDatesPage() {
   const [cycles, setCycles] = useState<Cycle[]>([])
   const [loading, setLoading] = useState(true)
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [creating, setCreating] = useState(false)
   const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
-  // раскрытый цикл + черновик окон + busy-флаги
+  // раскрытый цикл + черновик окон + busy
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
-  const [statusBusy, setStatusBusy] = useState<string | null>(null)
-
-    // переименование цикла
-  const [renaming, setRenaming] = useState<Cycle | null>(null)
-  const [renameValue, setRenameValue] = useState('')
-  const [renameSaving, setRenameSaving] = useState(false)
-  const [renameError, setRenameError] = useState<string | null>(null)
 
   useEffect(() => {
     loadCycles()
@@ -225,31 +193,11 @@ export default function DeputyCyclesPage() {
     }))
   }
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setCreating(true)
-    setNotice(null)
-
-    const result = await createCycle(newName)
-
-    if (!result.success) {
-      setNotice({ type: 'err', text: result.error || 'Ошибка создания' })
-      setCreating(false)
-      return
-    }
-
-    setNotice({ type: 'ok', text: `Цикл «${newName.trim()}» создан — задайте окна регламента и откройте его` })
-    setNewName('')
-    setShowCreate(false)
-    loadCycles()
-    setCreating(false)
-  }
-
   const handleSaveWindows = async (cycleId: string) => {
     const draft = drafts[cycleId]
     if (!draft) return
 
-        // клиентская валидация дат — зеркально серверу
+    // клиентская валидация дат — зеркально серверу
     for (const s of STAGES) {
       const w = draft[s.key]
       const hasStart = !!w?.starts_on
@@ -279,49 +227,7 @@ export default function DeputyCyclesPage() {
       setNotice({ type: 'err', text: result.error || 'Ошибка сохранения' })
       return
     }
-    setNotice({ type: 'ok', text: 'Окна регламента сохранены — сроки обновлены' })
-    loadCycles()
-  }
-
-  const handleStatus = async (cycle: Cycle, status: 'planning' | 'active' | 'closed') => {
-    setStatusBusy(cycle.id)
-    setNotice(null)
-    const result = await setCycleStatus(cycle.id, status)
-    setStatusBusy(null)
-
-    if (!result.success) {
-      setNotice({ type: 'err', text: result.error || 'Ошибка' })
-      return
-    }
-    loadCycles()
-  }
-
-    const openRename = (cycle: Cycle) => {
-    setRenaming(cycle)
-    setRenameValue(cycle.name)
-    setRenameError(null)
-    setNotice(null)
-  }
-
-  const doRename = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!renaming) return
-
-    if (!renameValue.trim()) {
-      setRenameError('Укажите название цикла')
-      return
-    }
-
-    setRenameSaving(true)
-    setRenameError(null)
-    const result = await renameCycle(renaming.id, renameValue)
-    setRenameSaving(false)
-
-    if (!result.success) {
-      setRenameError(result.error || 'Ошибка переименования')
-      return
-    }
-    setRenaming(null)
+    setNotice({ type: 'ok', text: 'Даты обновлены — сроки этапов пересчитаны для всей кафедры' })
     loadCycles()
   }
 
@@ -332,7 +238,7 @@ export default function DeputyCyclesPage() {
         style={{ minHeight: 'calc(100vh - 6rem)' }}
       >
         <Loader2 className="w-6 h-6 animate-spin text-[#8C2F1B]" />
-        <p className="font-quote italic text-muted-foreground">Канцелярия готовитъ реестръ циклов...</p>
+        <p className="font-quote italic text-muted-foreground">Канцелярия готовитъ календарь...</p>
       </div>
     )
   }
@@ -343,101 +249,34 @@ export default function DeputyCyclesPage() {
       <div className="flex flex-wrap items-start justify-between gap-4 animate-fade-up">
         <div className="pt-1">
           <p className="font-display text-[10px] tracking-[0.36em] text-muted-foreground">
-            РАЗДЕЛЪ III · РЕЕСТРЪ ЦИКЛОВЪ
+            РАЗДЕЛЪ III · ДАТЫ ЦИКЛОВЪ
           </p>
           <h1 className="font-display text-3xl font-bold tracking-tight mt-2 [text-shadow:0_1px_0_rgba(255,255,255,0.6)]">
-            Циклы
+            Даты
           </h1>
           <p className="font-quote italic text-muted-foreground mt-2">
-            учебный год задаетъ рамки: даты этапов видитъ вся кафедра
+            правка окон регламента по ходу цикла — создание цикловъ у секретаря
           </p>
-        </div>
-
-        <div className="flex flex-col items-end gap-2.5">
-          <button
-            onClick={() => { setShowCreate(!showCreate); setNotice(null) }}
-            className={`inline-flex items-center gap-2.5 h-11 px-5 font-display text-[11px] uppercase tracking-[0.2em] border transition-all duration-200 active:scale-[0.99] ${
-              showCreate
-                ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF]'
-                : 'bg-card border-[#B08D46]/60 text-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B]'
-            }`}
-          >
-            <Plus className="w-4 h-4" />
-            Новый циклъ
-          </button>
         </div>
       </div>
 
-      {/* ── Баннер уведомлений (плавный) ── */}
-      <Collapse open={!!notice}>
-        {notice && (
-          <div
-            className={`flex items-start gap-2.5 border px-4 py-3 ${
-              notice.type === 'ok'
-                ? 'border-[#B08D46]/60 bg-[#B08D46]/10'
-                : 'border-l-2 border-l-[#8C2F1B] border-red-200 bg-red-50'
-            }`}
-          >
-            {notice.type === 'ok' ? (
-              <CheckCircle2 className="w-4 h-4 text-[#8A6B2F] mt-0.5 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
-            )}
-            <p className={`text-sm ${notice.type === 'ok' ? 'text-[#6E5A2A]' : 'text-red-800'}`}>{notice.text}</p>
-          </div>
-        )}
-      </Collapse>
-
-      {/* ── Ведомость № 3: создание цикла (плавная) ── */}
-      <Collapse open={showCreate}>
-        <div className="relative border border-[#B08D46]/50 bg-card p-1.5 shadow-[0_1px_2px_rgba(43,33,24,0.06),0_18px_44px_-22px_rgba(43,33,24,0.35)]">
-          <Corners />
-          <div className="border border-border px-7 py-6 relative">
-            <button
-              onClick={() => setShowCreate(false)}
-              className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Закрыть"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <p className="text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-              Ведомость № 3
-            </p>
-            <h2 className="font-display text-xl font-bold tracking-tight text-center mt-1.5 [text-shadow:0_1px_0_rgba(255,255,255,0.6)]">
-              Новый учебный циклъ
-            </h2>
-
-            <form onSubmit={handleCreate} className="mt-7 max-w-md mx-auto space-y-5">
-              <div className="space-y-1.5">
-                <FieldLabel htmlFor="cycle-name">Название учебного года</FieldLabel>
-                <JournalInput
-                  id="cycle-name"
-                  placeholder="2025/2026"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  required
-                  maxLength={50}
-                  disabled={creating}
-                />
-              </div>
-
-              <button type="submit" disabled={creating} className="w-full disabled:opacity-60">
-                <WaxButton className="h-12 w-full">
-                  {creating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Создается...
-                    </>
-                  ) : (
-                    'Создать циклъ'
-                  )}
-                </WaxButton>
-              </button>
-            </form>
-          </div>
+      {/* ── Баннер уведомлений ── */}
+      {notice && (
+        <div
+          className={`flex items-start gap-2.5 border px-4 py-3 animate-fade-up ${
+            notice.type === 'ok'
+              ? 'border-[#B08D46]/60 bg-[#B08D46]/10'
+              : 'border-l-2 border-l-[#8C2F1B] border-red-200 bg-red-50'
+          }`}
+        >
+          {notice.type === 'ok' ? (
+            <CheckCircle2 className="w-4 h-4 text-[#8A6B2F] mt-0.5 shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
+          )}
+          <p className={`text-sm ${notice.type === 'ok' ? 'text-[#6E5A2A]' : 'text-red-800'}`}>{notice.text}</p>
         </div>
-      </Collapse>
+      )}
 
       {/* ── Реестр циклов ── */}
       <div className="relative">
@@ -453,9 +292,9 @@ export default function DeputyCyclesPage() {
             <Corners />
             <div className="border border-border px-6 py-12 text-center">
               <CalendarDays className="w-8 h-8 mx-auto text-[#B08D46]/60 mb-4" />
-              <p className="font-display text-lg font-bold">Реестръ пустъ</p>
+              <p className="font-display text-lg font-bold">Цикловъ нет</p>
               <p className="font-quote italic text-sm text-muted-foreground mt-2">
-                Ни один циклъ еще не созданъ — начните с «Новый циклъ»
+                Циклы открывает секретарь — после этого здесь появятся даты
               </p>
             </div>
           </div>
@@ -464,7 +303,7 @@ export default function DeputyCyclesPage() {
             {cycles.map((cycle, i) => {
               const isExpanded = expandedId === cycle.id
               const draft = drafts[cycle.id]
-              const busy = savingId === cycle.id || statusBusy === cycle.id
+              const busy = savingId === cycle.id
               return (
                 <div
                   key={cycle.id}
@@ -489,49 +328,7 @@ export default function DeputyCyclesPage() {
                         </p>
                       </div>
 
-                        <button
-                        onClick={() => openRename(cycle)}
-                        title="Переименовать цикл"
-                        className="p-2 border border-[#B08D46]/50 text-muted-foreground hover:text-[#8C2F1B] hover:border-[#8C2F1B] transition-colors"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-
                       <StatusBadge status={cycle.status} />
-
-                      {/* кнопки статуса */}
-                      <div className="flex items-center gap-1.5">
-                        {cycle.status === 'planning' && (
-                          <button
-                            onClick={() => handleStatus(cycle, 'active')}
-                            disabled={statusBusy === cycle.id}
-                            title="Открыть цикл"
-                            className="p-2 border border-[#8C2F1B]/60 text-[#8C2F1B] bg-[#8C2F1B]/5 hover:bg-[#8C2F1B] hover:text-[#F3EDDF] transition-colors disabled:opacity-50"
-                          >
-                            {statusBusy === cycle.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                          </button>
-                        )}
-                        {cycle.status === 'active' && (
-                          <button
-                            onClick={() => handleStatus(cycle, 'closed')}
-                            disabled={statusBusy === cycle.id}
-                            title="Закрыть цикл"
-                            className="p-2 border border-[#B08D46]/50 text-muted-foreground hover:text-[#8C2F1B] hover:border-[#8C2F1B] transition-colors disabled:opacity-50"
-                          >
-                            {statusBusy === cycle.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
-                          </button>
-                        )}
-                        {cycle.status === 'closed' && (
-                          <button
-                            onClick={() => handleStatus(cycle, 'planning')}
-                            disabled={statusBusy === cycle.id}
-                            title="Вернуть в планирование"
-                            className="p-2 border border-[#B08D46]/50 text-muted-foreground hover:text-[#8C2F1B] hover:border-[#8C2F1B] transition-colors disabled:opacity-50"
-                          >
-                            {statusBusy === cycle.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                          </button>
-                        )}
-                      </div>
                     </div>
 
                     {/* окна регламента (плавное раскрытие) */}
@@ -593,7 +390,7 @@ export default function DeputyCyclesPage() {
                                   ) : (
                                     <>
                                       <Save className="w-4 h-4" />
-                                      Сохранить окна
+                                      Сохранить даты
                                     </>
                                   )}
                                 </WaxButton>
@@ -611,75 +408,9 @@ export default function DeputyCyclesPage() {
         )}
       </div>
 
-            {/* ── Переименование цикла (модаль) ── */}
-      {renaming && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 animate-fade-in"
-          onClick={() => setRenaming(null)}
-        >
-          <div
-            className="relative w-full max-w-md bg-card border border-[#B08D46]/50 p-1.5 shadow-[0_24px_60px_-20px_rgba(43,33,24,0.5)] animate-fade-up"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Corners />
-            <div className="border border-border px-7 py-6">
-              <button
-                onClick={() => setRenaming(null)}
-                className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Закрыть"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <p className="text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                Переименование
-              </p>
-              <h2 className="font-display text-xl font-bold tracking-tight text-center mt-1.5 [text-shadow:0_1px_0_rgba(255,255,255,0.6)]">
-                Циклъ {renaming.name}
-              </h2>
-
-              {renameError && (
-                <div className="mt-4 flex items-start gap-2.5 border-l-2 border-[#8C2F1B] bg-red-50 px-4 py-3 animate-fade-up">
-                  <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
-                  <p className="text-sm text-red-800">{renameError}</p>
-                </div>
-              )}
-
-              <form onSubmit={doRename} className="mt-6 space-y-5">
-                <div className="space-y-1.5">
-                  <FieldLabel htmlFor="rename-name">Новое название</FieldLabel>
-                  <JournalInput
-                    id="rename-name"
-                    placeholder="2025/2026"
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    required
-                    maxLength={50}
-                    disabled={renameSaving}
-                  />
-                </div>
-
-                <button type="submit" disabled={renameSaving} className="w-full disabled:opacity-60">
-                  <WaxButton className="h-12 w-full">
-                    {renameSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Сохраняется...
-                      </>
-                    ) : (
-                      'Сохранить'
-                    )}
-                  </WaxButton>
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Подпись ── */}
       <p className="text-right font-quote italic text-xs text-muted-foreground/80 animate-fade-in [animation-delay:600ms]">
-        Даты пересчитываются системой — правки действуют на все разделы
+        Изменение дат пересчитывает сроки — уведомления разойдутъ по кафедре
       </p>
     </div>
   )

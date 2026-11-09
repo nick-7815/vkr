@@ -24,6 +24,27 @@ export async function generateOrder(cycleId: string) {
 
   const supabase = await createClient()
 
+  // незакрытый проект уже на столе — второй не собираем,
+  // иначе пары продублируются между приказами
+  const { data: openOrder } = await supabase
+    .from('orders')
+    .select('id, status')
+    .eq('cycle_id', cycleId)
+    .in('status', ['draft', 'sent', 'rework'])
+    .limit(1)
+
+  if (openOrder && openOrder.length > 0) {
+    const labels: Record<string, string> = {
+      draft: 'проектъ',
+      sent: 'отправленъ въ ректоратъ',
+      rework: 'возвращенъ съ замечаніями',
+    }
+    return {
+      success: false,
+      error: `Приказъ уже на столе (${labels[openOrder[0].status] ?? openOrder[0].status}) — отправьте его или удалите`,
+    }
+  }
+
   // поданные студенты цикла
   const { data: apps, error: appsError } = await supabase
     .from('applications')
@@ -68,39 +89,98 @@ export async function generateOrder(cycleId: string) {
   return { success: true, orderId: order.id, count: items.length }
 }
 
-/* Отправить проект в ректорат (Task_CheckOrder) */
+/* Отправить проект в ректорат (Task_CheckOrder).
+   После замечаний отправляется повторно — тем же приказом */
 export async function sendOrder(orderId: string) {
   await requireSecretaryOrDeputy()
 
   const supabase = await createClient()
 
-  // отправить можно только проект (draft)
+  const { data: order } = await supabase
+    .from('orders')
+    .select('status')
+    .eq('id', orderId)
+    .single()
+
+  if (!order) {
+    return { success: false, error: 'Приказ не найден' }
+  }
+  if (order.status !== 'draft' && order.status !== 'rework') {
+    return { success: false, error: 'Отправить можно только проектъ или возвращённый приказъ' }
+  }
+
   const { error } = await supabase
     .from('orders')
     .update({ status: 'sent' })
     .eq('id', orderId)
-    .eq('status', 'draft')
+    .in('status', ['draft', 'rework'])
 
   if (error) {
     return { success: false, error: error.message }
   }
 
+  // повторная отправка после доработки — снимаем замечания с подач наставника
+  if (order.status === 'rework') {
+    const { data: items } = await supabase
+      .from('order_items')
+      .select('application_id')
+      .eq('order_id', orderId)
+
+    const appIds = (items || []).map((i) => i.application_id)
+    if (appIds.length > 0) {
+      await supabase.from('applications').update({ rework_note: null }).in('id', appIds)
+    }
+  }
+
   return { success: true }
 }
 
-/* Зафиксировать ответ ректората (Event_OrderReply + Gateway_Signed) */
+/* Зафиксировать ответ ректората (Event_OrderReply + Gateway_Signed):
+   — signed: подписан, можно публиковать;
+   — fix: возвращён с замечаниями (текст обязателен), наставник их увидит */
 export async function markOrderReply(
   orderId: string,
-  outcome: 'signed' | 'fix'
+  outcome: 'signed' | 'fix',
+  note?: string
 ) {
   await requireSecretaryOrDeputy()
 
   const supabase = await createClient()
 
-  // ответ можно фиксировать только у отправленного
+  if (outcome === 'fix') {
+    const trimmed = (note || '').trim()
+    if (!trimmed) {
+      return { success: false, error: 'Укажите текстъ замечаній ректората' }
+    }
+
+    // ответ можно фиксировать только у отправленного
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'rework', rework_note: trimmed })
+      .eq('id', orderId)
+      .eq('status', 'sent')
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    // штампуем замечанием подачи из приказа — их видит наставник
+    const { data: items } = await supabase
+      .from('order_items')
+      .select('application_id')
+      .eq('order_id', orderId)
+
+    const appIds = (items || []).map((i) => i.application_id)
+    if (appIds.length > 0) {
+      await supabase.from('applications').update({ rework_note: trimmed }).in('id', appIds)
+    }
+
+    return { success: true }
+  }
+
   const { error } = await supabase
     .from('orders')
-    .update({ status: outcome === 'signed' ? 'signed' : 'draft' })
+    .update({ status: 'signed' })
     .eq('id', orderId)
     .eq('status', 'sent')
 
@@ -152,7 +232,7 @@ export async function publishOrder(orderId: string) {
 
     const { error: appsError } = await supabase
       .from('applications')
-      .update({ status: 'published' })
+      .update({ status: 'published', rework_note: null })
       .in('id', appIds)
 
     if (appsError) {
@@ -181,7 +261,8 @@ export async function publishOrder(orderId: string) {
 
   return { success: true }
 }
-/* Удалить проект (только draft, без отправки) */
+
+/* Удалить проект (draft или возвращённый с замечаниями, без отправки) */
 export async function deleteOrder(orderId: string) {
   await requireSecretaryOrDeputy()
 
@@ -196,8 +277,21 @@ export async function deleteOrder(orderId: string) {
   if (!order) {
     return { success: false, error: 'Приказ не найден' }
   }
-  if (order.status !== 'draft') {
-    return { success: false, error: 'Удалить можно только проект (до отправки)' }
+  if (order.status !== 'draft' && order.status !== 'rework') {
+    return { success: false, error: 'Удалить можно только проектъ или возвращённый приказъ' }
+  }
+
+  // возвращённый приказ: снимаем замечания — студенты снова просто «Подано»
+  if (order.status === 'rework') {
+    const { data: items } = await supabase
+      .from('order_items')
+      .select('application_id')
+      .eq('order_id', orderId)
+
+    const appIds = (items || []).map((i) => i.application_id)
+    if (appIds.length > 0) {
+      await supabase.from('applications').update({ rework_note: null }).in('id', appIds)
+    }
   }
 
   // order_items удалятся каскадом (on delete cascade)

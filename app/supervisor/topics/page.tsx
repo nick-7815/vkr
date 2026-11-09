@@ -28,6 +28,7 @@ type Application = {
   topic_id: string
   final_title: string
   status: string
+  rework_note: string | null
   student: { full_name: string } | null
   topic: { title: string } | null
 }
@@ -138,6 +139,7 @@ export default function SupervisorTopicsPage() {
   const [topics, setTopics] = useState<Topic[]>([])
   const [cycle, setCycle] = useState<Cycle | null>(null)
   const [myId, setMyId] = useState<string | null>(null)
+  const [myRole, setMyRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -214,7 +216,15 @@ export default function SupervisorTopicsPage() {
     const supabase = createClient()
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (user) setMyId(user.id)
+    if (user) {
+      setMyId(user.id)
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      if (prof) setMyRole(prof.role)
+    }
 
     // активный цикл
     const { data: cycleData } = await supabase
@@ -249,7 +259,7 @@ export default function SupervisorTopicsPage() {
     if (cycleData) {
       const { data: appsData } = await supabase
         .from('applications')
-        .select('id, student_id, topic_id, final_title, status, student:profiles!applications_student_id_fkey(full_name), topic:topics(title)')
+        .select('id, student_id, topic_id, final_title, status, rework_note, student:profiles!applications_student_id_fkey(full_name), topic:topics(title)')
         .eq('cycle_id', cycleData.id)
         .order('created_at', { ascending: false })
       setApplications((appsData as unknown as Application[]) || [])
@@ -461,6 +471,14 @@ export default function SupervisorTopicsPage() {
     })
   }
 
+  // замечания ректората по моим подачам — для баннера сверху
+  const reworkNotes = applications
+    .filter((a) => a.rework_note && topics.some((t) => t.id === a.topic_id))
+    .map((a) => ({
+      note: a.rework_note as string,
+      topic: topics.find((t) => t.id === a.topic_id)?.title ?? a.final_title,
+    }))
+
   if (loading) {
     return (
       <div
@@ -480,10 +498,10 @@ export default function SupervisorTopicsPage() {
         <div className="flex flex-wrap items-start justify-between gap-4 animate-fade-up">
           <div className="pt-1">
             <p className="font-display text-[10px] tracking-[0.36em] text-muted-foreground">
-              РАЗДЕЛЪ IV · МОИ ТЕМЫ
+              {myRole === 'deputy' ? 'РАЗДЕЛЪ IV · ТЕМЫ КАФЕДРЫ' : 'РАЗДЕЛЪ IV · МОИ ТЕМЫ'}
             </p>
             <h1 className="font-display text-3xl font-bold tracking-tight mt-2 [text-shadow:0_1px_0_rgba(255,255,255,0.6)]">
-              Мои темы
+              {myRole === 'deputy' ? 'Темы кафедры' : 'Мои темы'}
             </h1>
           </div>
         </div>
@@ -508,7 +526,7 @@ export default function SupervisorTopicsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4 animate-fade-up">
         <div className="pt-1">
           <p className="font-display text-[10px] tracking-[0.36em] text-muted-foreground">
-            РАЗДЕЛЪ IV · МОИ ТЕМЫ
+            {myRole === 'deputy' ? 'РАЗДЕЛЪ IV · ТЕМЫ КАФЕДРЫ' : 'РАЗДЕЛЪ IV · МОИ ТЕМЫ'}
           </p>
           <h1 className="font-display text-3xl font-bold tracking-tight mt-2 [text-shadow:0_1px_0_rgba(255,255,255,0.6)]">
             Темы ВКР
@@ -571,6 +589,28 @@ export default function SupervisorTopicsPage() {
             <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
           )}
           <p className={`text-sm ${notice.type === 'ok' ? 'text-[#6E5A2A]' : 'text-red-800'}`}>{notice.text}</p>
+        </div>
+      )}
+
+      {/* ── Замечанія ректората по подачам (Task_NotifyFix) ── */}
+      {reworkNotes.length > 0 && (
+        <div className="border-l-2 border-l-[#8C2F1B] border-red-200 bg-red-50 px-4 py-3.5 animate-fade-up">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <p className="font-display text-[10px] uppercase tracking-[0.22em] text-[#8C2F1B]">
+                Ректоратъ вернул приказъ съ замечаніями
+              </p>
+              {reworkNotes.map((r, i) => (
+                <p key={i} className="font-quote italic text-sm text-red-900 mt-1 whitespace-pre-wrap">
+                  «{r.note}» — по теме «{r.topic}»
+                </p>
+              ))}
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Исправьте формулировку темы через «правку» — подача обновится автоматически; секретарь отправит приказъ повторно
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -873,36 +913,55 @@ export default function SupervisorTopicsPage() {
               </p>
             ) : (
               <div className="space-y-3">
-                {applications.map((a, i) => (
-                  <div
-                    key={a.id}
-                    className="border border-border px-5 py-4 flex items-start gap-4 animate-fade-up"
-                    style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-display text-[15px] font-bold">
-                        {a.student?.full_name || 'Студентъ'}
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-1 font-quote italic">
-                        «{a.final_title}»
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="inline-block font-display text-[9px] uppercase tracking-[0.18em] px-2.5 py-1 border border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F]">
-                        {a.status === 'submitted' ? 'Подано' : a.status === 'in_order' ? 'В приказе' : 'Утверждено'}
-                      </span>
-                      {a.status === 'submitted' && (
-                        <button
-                          onClick={() => openCancel(a)}
-                          title="Отменить подачу"
-                          className="p-2 border border-[#8C2F1B]/60 text-[#8C2F1B] bg-[#8C2F1B]/5 hover:bg-[#8C2F1B] hover:text-[#F3EDDF] transition-colors"
-                        >
-                          <Ban className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+{applications.map((a, i) => (
+  <div
+    key={a.id}
+    className="border border-border px-5 py-4 flex items-start gap-4 animate-fade-up"
+    style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}
+  >
+    <div className="min-w-0 flex-1">
+      <p className="font-display text-[15px] font-bold">
+        {a.student?.full_name || 'Студентъ'}
+      </p>
+      <p className="text-sm text-muted-foreground mt-1 font-quote italic">
+        «{a.final_title}»
+      </p>
+      {a.rework_note && (
+        <div className="mt-2 inline-block border border-[#8C2F1B]/50 bg-[#8C2F1B]/5 px-3 py-1.5 -rotate-1">
+          <p className="font-display text-[9px] uppercase tracking-[0.18em] text-[#8C2F1B]">Замечаніе ректората</p>
+          <p className="font-quote italic text-xs text-red-900 mt-0.5 whitespace-pre-wrap">{a.rework_note}</p>
+        </div>
+      )}
+    </div>
+    <div className="flex items-center gap-2 shrink-0">
+      <span className="inline-block font-display text-[9px] uppercase tracking-[0.18em] px-2.5 py-1 border border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F]">
+        {a.status === 'submitted' ? 'Подано' : a.status === 'in_order' ? 'В приказе' : 'Утверждено'}
+      </span>
+      {(() => {
+        const topic = topics.find((t) => t.id === a.topic_id)
+        if (!topic || topic.status === 'approved') return null
+        return (
+          <button
+            onClick={() => openEdit(topic)}
+            title="Править тему"
+            className="p-2 border border-[#B08D46]/50 text-muted-foreground hover:text-[#8C2F1B] hover:border-[#8C2F1B] transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )
+      })()}
+      {a.status === 'submitted' && (
+        <button
+          onClick={() => openCancel(a)}
+          title="Отменить подачу"
+          className="p-2 border border-[#8C2F1B]/60 text-[#8C2F1B] bg-[#8C2F1B]/5 hover:bg-[#8C2F1B] hover:text-[#F3EDDF] transition-colors"
+        >
+          <Ban className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  </div>
+))}
               </div>
             )}
           </div>
@@ -956,7 +1015,7 @@ export default function SupervisorTopicsPage() {
                       <span className="text-xs text-muted-foreground font-quote italic">
                         {STATUS_LABELS[t.status] ?? t.status}
                       </span>
-                      {applications.some((a) => a.topic_id === t.id) && (
+                        {applications.some((a) => a.topic_id === t.id) && (
                         <span className="inline-block font-display text-[9px] uppercase tracking-[0.18em] px-2.5 py-1 border border-[#8C2F1B]/60 text-[#8C2F1B] bg-[#8C2F1B]/5">
                           закреплена за студентом
                         </span>

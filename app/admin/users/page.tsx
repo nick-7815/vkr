@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { importStudentsFromCsv, createUserManually, setUserActive, updateProfile } from './actions'
 type UserRole =
-  | 'student' | 'supervisor' | 'reviewer' | 'norm_controller'
+  | 'student' | 'supervisor' | 'reviewer'
   | 'secretary' | 'head' | 'deputy'
 
 type User = {
@@ -25,7 +25,6 @@ const ROLE_LABELS: Record<UserRole, string> = {
   student: 'Студентъ',
   supervisor: 'Наставникъ',
   reviewer: 'Рецензентъ',
-  norm_controller: 'Нормоконтролеръ',
   secretary: 'Секретарь',
   head: 'Заведующий кафедрой',
   deputy: 'Зам. заведующего',

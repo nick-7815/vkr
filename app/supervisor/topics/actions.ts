@@ -128,10 +128,11 @@ export async function updateTopic(data: {
     return { success: false, error: error.message }
   }
 
-  // синхронизация: у поданных студентов формулировка = формулировка темы
+  // синхронизация: у поданных студентов формулировка = формулировка темы;
+  // правка темы = ответ на замечание ректората — штамп снимается сразу
   const { error: syncError } = await supabase
     .from('applications')
-    .update({ final_title: data.title.trim() })
+    .update({ final_title: data.title.trim(), rework_note: null })
     .eq('topic_id', data.topicId)
 
   if (syncError) {

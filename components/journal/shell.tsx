@@ -7,7 +7,6 @@ const ROLE_LABELS: Record<string, string> = {
   student: 'Студентъ',
   supervisor: 'Наставникъ',
   reviewer: 'Рецензентъ',
-  norm_controller: 'Нормоконтролеръ',
   secretary: 'Секретарь',
   head: 'Заведующий кафедрой',
   deputy: 'Зам. заведующего',
@@ -48,20 +47,20 @@ export default async function JournalShell({
     ...(role === 'deputy'
       ? [
           { href: '/admin/users', label: 'Пользователи' },
-          { href: '/deputy/topics', label: 'Темы ВКР' },
-          { href: '/deputy/cycles', label: 'Циклы' },
+          { href: '/supervisor/topics', label: 'Темы ВКР' },
+          { href: '/deputy/cycles', label: 'Даты' },
         ]
       : []),
     ...(role === 'supervisor'
       ? [
-          { href: '/supervisor/my-students', label: 'Мои студенты' },
           { href: '/supervisor/topics', label: 'Мои темы' },
         ]
       : []),
 
-          ...(role === 'secretary'
+    ...(role === 'secretary'
       ? [
           { href: '/secretary/orders', label: 'Приказы' },
+          { href: '/secretary/cycles', label: 'Циклы' },
         ]
       : []),
     ...(role === 'student'

@@ -117,6 +117,7 @@ function LedgerRow({
 const STAGES = ['Тема', 'Приказ', 'Просмотры', 'Нормоконтроль', 'Защита']
 
 const STAGE_LABELS: Record<string, string> = {
+  applications: 'Каталогъ и подача',
   bibliography: 'Библиография',
   screening1: 'Просмотръ №1',
   screening2: 'Просмотръ №2',
@@ -152,17 +153,19 @@ export default async function DashboardPage() {
   const dateLine = `Дано въ ${now.getDate()}-й день ${MONTHS_GEN[now.getMonth()]} ${now.getFullYear()} года`
 
   // ── Данные: подсчёты (если таблицы нет — покажем «—») ──
-  const [usersRes, cyclesRes, topicsRes, appsRes] = await Promise.all([
+  const [usersRes, cyclesRes, topicsRes, appsRes, ordersActiveRes] = await Promise.all([
     supabase.from('profiles').select('*', { count: 'exact', head: true }),
     supabase.from('cycles').select('*', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('topics').select('*', { count: 'exact', head: true }),
     supabase.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'submitted'),
+    supabase.from('orders').select('*', { count: 'exact', head: true }).in('status', ['draft', 'sent', 'rework']),
   ])
 
   const usersCount = usersRes.count
   const cyclesCount = cyclesRes.count
   const topicsCount = topicsRes.count
   const appsCount = appsRes.count
+  const ordersActiveCount = ordersActiveRes.count
 
   // ── Персональные данные по ролям ──
   let myTopicsCount: number | null = null
@@ -219,12 +222,13 @@ export default async function DashboardPage() {
       .select('stage, starts_on, ends_on')
       .eq('cycle_id', activeCycle.id)
       .order('starts_on')
-      .limit(5)
+      .limit(9)
     windows = res.data
   }
 
   // ── Строки реестра по ролям ──
-  const isDeputy = role === 'deputy'
+  const isDeputy = role === 'deputy' || role === 'head'
+  const isSecretary = role === 'secretary'
   const isSupervisor = role === 'supervisor'
 
   // Штемпель статуса студента
@@ -274,6 +278,7 @@ export default async function DashboardPage() {
             <div className="border border-border px-6 py-5">
               <p className="text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground pb-2 border-b border-border mb-2">
                 {isDeputy && 'Реестръ общий'}
+                {isSecretary && 'Реестръ канцеляріи'}
                 {isSupervisor && 'Реестръ наставника'}
                 {role === 'student' && 'Листъ студента'}
               </p>
@@ -284,6 +289,14 @@ export default async function DashboardPage() {
                   <LedgerRow label="Активныхъ цикловъ" value={cyclesCount} delay={230} />
                   <LedgerRow label="Темъ въ каталоге" value={topicsCount} delay={310} />
                   <LedgerRow label="Подания ожидаютъ приказа" value={appsCount} delay={390} />
+                </>
+              )}
+
+              {isSecretary && (
+                <>
+                  <LedgerRow label="Подания ожидаютъ приказа" value={appsCount} delay={150} />
+                  <LedgerRow label="Приказовъ въ работѣ" value={ordersActiveCount} delay={230} />
+                  <LedgerRow label="Активныхъ цикловъ" value={cyclesCount} delay={310} />
                 </>
               )}
 

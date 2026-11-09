@@ -12,6 +12,7 @@ type Order = {
   id: string
   cycle_id: string
   status: string
+  rework_note: string | null
   published_at: string | null
   created_at: string
   cycle: { name: string } | null
@@ -27,6 +28,7 @@ type OrderItem = {
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Проектъ',
   sent: 'Отправленъ въ ректоратъ',
+  rework: 'Возвращенъ съ замечаніями',
   signed: 'Подписанъ',
   published: 'Опубликованъ',
 }
@@ -54,14 +56,17 @@ function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[status] ?? status
   const published = status === 'published'
   const signed = status === 'signed'
+  const rework = status === 'rework'
   return (
     <span
       className={`inline-block font-display text-[9px] uppercase tracking-[0.18em] px-2.5 py-1 border ${
         published
           ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF] shadow-[inset_0_0_0_1px_rgba(243,237,223,0.2)]'
-          : signed
-            ? 'border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F]'
-            : 'border-border bg-secondary text-muted-foreground'
+          : rework
+            ? 'border-[#8C2F1B]/60 bg-[#8C2F1B]/5 text-[#8C2F1B]'
+            : signed
+              ? 'border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F]'
+              : 'border-border bg-secondary text-muted-foreground'
       }`}
     >
       {label}
@@ -98,6 +103,12 @@ export default function SecretaryOrdersPage() {
   const [deletingOrder, setDeletingOrder] = useState<Order | null>(null)
   const [deleteOrderBusy, setDeleteOrderBusy] = useState(false)
 
+  // замечания ректората (модаль)
+  const [fixingOrder, setFixingOrder] = useState<Order | null>(null)
+  const [fixNote, setFixNote] = useState('')
+  const [fixBusy, setFixBusy] = useState(false)
+  const [fixError, setFixError] = useState<string | null>(null)
+
   useEffect(() => {
     loadAll()
   }, [])
@@ -125,7 +136,7 @@ export default function SecretaryOrdersPage() {
 
     const { data, error } = await supabase
       .from('orders')
-      .select('id, cycle_id, status, published_at, created_at, cycle:cycles(name)')
+      .select('id, cycle_id, status, rework_note, published_at, created_at, cycle:cycles(name)')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -203,14 +214,13 @@ export default function SecretaryOrdersPage() {
     loadAll()
   }
 
-  const handleLifecycle = async (order: Order, action: 'send' | 'sign' | 'fix' | 'publish') => {
+  const handleLifecycle = async (order: Order, action: 'send' | 'sign' | 'publish') => {
     setBusyId(order.id)
     setNotice(null)
 
     let result
     if (action === 'send') result = await sendOrder(order.id)
     else if (action === 'sign') result = await markOrderReply(order.id, 'signed')
-    else if (action === 'fix') result = await markOrderReply(order.id, 'fix')
     else result = await publishOrder(order.id)
 
     setBusyId(null)
@@ -219,6 +229,36 @@ export default function SecretaryOrdersPage() {
       setNotice({ type: 'err', text: result.error || 'Ошибка' })
       return
     }
+    loadAll()
+  }
+
+  const openFix = (order: Order) => {
+    setFixingOrder(order)
+    setFixNote(order.rework_note || '')
+    setFixError(null)
+    setNotice(null)
+  }
+
+  const doFix = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!fixingOrder) return
+
+    if (!fixNote.trim()) {
+      setFixError('Укажите текстъ замечаній ректората')
+      return
+    }
+
+    setFixBusy(true)
+    setFixError(null)
+    const result = await markOrderReply(fixingOrder.id, 'fix', fixNote)
+    setFixBusy(false)
+
+    if (!result.success) {
+      setFixError(result.error || 'Ошибка')
+      return
+    }
+    setFixingOrder(null)
+    setNotice({ type: 'ok', text: 'Приказъ возвращенъ на доработку — наставники увидят замечанія у своих подач' })
     loadAll()
   }
 
@@ -421,12 +461,31 @@ export default function SecretaryOrdersPage() {
                               {busyId === order.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PenLine className="w-3.5 h-3.5" />}
                             </button>
                             <button
-                              onClick={() => handleLifecycle(order, 'fix')}
+                              onClick={() => openFix(order)}
                               disabled={busyId === order.id}
-                              title="Вернуть с замечаниями"
+                              title="Ректорат вернул с замечаниями"
                               className="p-2 border border-[#B08D46]/50 text-muted-foreground hover:text-[#8C2F1B] hover:border-[#8C2F1B] transition-colors disabled:opacity-50"
                             >
-                              {busyId === order.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                        {order.status === 'rework' && (
+                          <>
+                            <button
+                              onClick={() => handleLifecycle(order, 'send')}
+                              disabled={busyId === order.id}
+                              title="Отправить в ректорат повторно"
+                              className="p-2 border border-[#8C2F1B]/60 text-[#8C2F1B] bg-[#8C2F1B]/5 hover:bg-[#8C2F1B] hover:text-[#F3EDDF] transition-colors disabled:opacity-50"
+                            >
+                              {busyId === order.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => setDeletingOrder(order)}
+                              title="Удалить возвращённый приказ"
+                              className="p-2 border border-[#B08D46]/50 text-muted-foreground hover:text-[#8C2F1B] hover:border-[#8C2F1B] transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </>
                         )}
@@ -442,6 +501,24 @@ export default function SecretaryOrdersPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* замечания ректората — видны всегда, без раскрытия */}
+                    {order.status === 'rework' && order.rework_note && (
+                      <div className="border-t border-border px-6 py-4 bg-red-50/60 flex items-start gap-2.5">
+                        <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-display text-[10px] uppercase tracking-[0.22em] text-[#8C2F1B]">
+                            Замечанія ректората
+                          </p>
+                          <p className="font-quote italic text-sm text-red-900 mt-1 whitespace-pre-wrap">
+                            «{order.rework_note}»
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1.5">
+                            Наставники исправят формулировки — после этого отправьте приказъ повторно
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     {/* состав приказа */}
                     {isExpanded && (
@@ -513,14 +590,15 @@ export default function SecretaryOrdersPage() {
               </button>
 
               <p className="text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                Удаление проекта
+                Удаление приказа
               </p>
               <h2 className="font-display text-lg font-bold tracking-tight text-center mt-2 leading-snug">
                 Приказъ отъ {new Date(deletingOrder.created_at).toLocaleDateString('ru-RU')}
               </h2>
               <p className="font-quote italic text-sm text-muted-foreground text-center mt-3">
-                Проект будет удален вместе со списком пар. Студенты останутся
-                в статусе «Подано» — их можно подать заново в новом проекте.
+                {deletingOrder.status === 'rework'
+                  ? 'Возвращённый приказ будет удален вместе со списком пар, замечания с подач снимутся. Студенты останутся «Подано» — соберите проект заново.'
+                  : 'Проект будет удален вместе со списком пар. Студенты останутся в статусе «Подано» — их можно подать заново в новом проекте.'}
               </p>
 
               <div className="mt-6 grid grid-cols-2 gap-3">
@@ -538,6 +616,83 @@ export default function SecretaryOrdersPage() {
                   {deleteOrderBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Удалить'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Замечания ректората (модаль) ── */}
+      {fixingOrder && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setFixingOrder(null)}
+        >
+          <div
+            className="relative w-full max-w-md bg-card border border-[#B08D46]/50 p-1.5 shadow-[0_24px_60px_-20px_rgba(43,33,24,0.5)] animate-fade-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Corners />
+            <div className="border border-border px-7 py-6">
+              <button
+                onClick={() => setFixingOrder(null)}
+                className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Закрыть"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <p className="text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                Ответъ ректората
+              </p>
+              <h2 className="font-display text-lg font-bold tracking-tight text-center mt-2 leading-snug">
+                Замечанія къ приказу
+              </h2>
+              <p className="font-quote italic text-sm text-muted-foreground text-center mt-3">
+                Приказъ вернется на доработку: наставники увидят замечанія у своих подач и исправят формулировки тем
+              </p>
+
+              {fixError && (
+                <div className="mt-4 flex items-start gap-2.5 border-l-2 border-[#8C2F1B] bg-red-50 px-4 py-3 animate-fade-up">
+                  <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
+                  <p className="text-sm text-red-800">{fixError}</p>
+                </div>
+              )}
+
+              <form onSubmit={doFix} className="mt-6 space-y-5">
+                <div className="space-y-1.5">
+                  <label htmlFor="fix-note" className="block text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Что указал ректоратъ
+                  </label>
+                  <textarea
+                    id="fix-note"
+                    value={fixNote}
+                    onChange={(e) => setFixNote(e.target.value)}
+                    required
+                    rows={4}
+                    maxLength={500}
+                    disabled={fixBusy}
+                    placeholder="Например: уточнить формулировку темы для Ивановой И. И."
+                    className="w-full bg-[#FAF5E8] border border-input px-3.5 py-3 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 disabled:opacity-50 placeholder:text-muted-foreground/50 resize-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setFixingOrder(null)}
+                    className="h-11 border border-[#B08D46]/60 bg-card text-foreground font-display text-[11px] uppercase tracking-[0.2em] transition-all hover:border-[#8C2F1B] active:scale-[0.99]"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={fixBusy}
+                    className="h-11 border border-[#6E2415] bg-[#8C2F1B] text-[#F3EDDF] font-display text-[11px] uppercase tracking-[0.2em] transition-all hover:bg-[#7A2715] active:scale-[0.99] disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    {fixBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Вернуть на доработку'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
