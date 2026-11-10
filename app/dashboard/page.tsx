@@ -313,14 +313,17 @@ export default async function DashboardPage() {
                   <div className="flex items-end gap-2 py-3.5 border-b border-border/60 animate-fade-up" style={{ animationDelay: '150ms' }}>
                     <span className="text-sm text-foreground/85 shrink-0">Тема</span>
                     <span className="flex-1 border-b-2 border-dotted border-[#B08D46]/45 mb-1.5" aria-hidden />
-                    <span className="font-quote text-lg font-semibold text-right max-w-[60%]">
+                    <span
+                      title={studentApp?.final_title ?? studentApp?.topic?.title ?? ''}
+                       className="font-quote text-[15px] font-bold leading-snug text-right max-w-[62%] line-clamp-2"
+                    >
                       {studentApp?.final_title ?? studentApp?.topic?.title ?? '— не выбрана'}
                     </span>
                   </div>
                   <div className="flex items-end gap-2 py-3.5 border-b border-border/60 animate-fade-up" style={{ animationDelay: '230ms' }}>
                     <span className="text-sm text-foreground/85 shrink-0">Руководитель</span>
                     <span className="flex-1 border-b-2 border-dotted border-[#B08D46]/45 mb-1.5" aria-hidden />
-                    <span className="font-quote text-lg font-semibold text-right">
+                     <span className="font-quote text-[15px] font-bold text-right">
                       {studentApp?.topic?.supervisor?.full_name ?? '—'}
                     </span>
                   </div>

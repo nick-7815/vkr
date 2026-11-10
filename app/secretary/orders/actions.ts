@@ -30,7 +30,7 @@ export async function generateOrder(cycleId: string) {
     .from('orders')
     .select('id, status')
     .eq('cycle_id', cycleId)
-    .in('status', ['draft', 'sent', 'rework'])
+    .in('status', ['draft', 'sent', 'rework', 'signed'])
     .limit(1)
 
   if (openOrder && openOrder.length > 0) {
@@ -38,10 +38,11 @@ export async function generateOrder(cycleId: string) {
       draft: 'проектъ',
       sent: 'отправленъ въ ректоратъ',
       rework: 'возвращенъ съ замечаніями',
+      signed: 'подписанъ — ожидаетъ публикации',
     }
     return {
       success: false,
-      error: `Приказъ уже на столе (${labels[openOrder[0].status] ?? openOrder[0].status}) — отправьте его или удалите`,
+      error: `Приказъ уже на столе (${labels[openOrder[0].status] ?? openOrder[0].status}) — сначала завершите его (опубликуйте или удалите)`,
     }
   }
 
@@ -84,6 +85,20 @@ export async function generateOrder(cycleId: string) {
     // откат: удаляем пустой приказ
     await supabase.from('orders').delete().eq('id', order.id)
     return { success: false, error: itemsError.message }
+  }
+
+  // подачи переходят въ «В приказе»: отменить/отозвать/подать вторично больше нельзя
+  const appIds = apps.map((a) => a.id)
+  const { error: statusError } = await supabase
+    .from('applications')
+    .update({ status: 'in_order' })
+    .in('id', appIds)
+
+  if (statusError) {
+    return {
+      success: false,
+      error: 'Приказъ собранъ, но статусы подачъ не обновлены: ' + statusError.message,
+    }
   }
 
   return { success: true, orderId: order.id, count: items.length }
@@ -281,17 +296,18 @@ export async function deleteOrder(orderId: string) {
     return { success: false, error: 'Удалить можно только проектъ или возвращённый приказъ' }
   }
 
-  // возвращённый приказ: снимаем замечания — студенты снова просто «Подано»
-  if (order.status === 'rework') {
-    const { data: items } = await supabase
-      .from('order_items')
-      .select('application_id')
-      .eq('order_id', orderId)
+  // пары из удалённого приказа возвращаются въ «Подано» — можно подавать заново
+  const { data: items } = await supabase
+    .from('order_items')
+    .select('application_id')
+    .eq('order_id', orderId)
 
-    const appIds = (items || []).map((i) => i.application_id)
-    if (appIds.length > 0) {
-      await supabase.from('applications').update({ rework_note: null }).in('id', appIds)
-    }
+  const appIds = (items || []).map((i) => i.application_id)
+  if (appIds.length > 0) {
+    await supabase
+      .from('applications')
+      .update({ status: 'submitted', rework_note: null })
+      .in('id', appIds)
   }
 
   // order_items удалятся каскадом (on delete cascade)
