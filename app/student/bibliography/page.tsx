@@ -2,8 +2,9 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect, useMemo } from 'react'
-import { Loader2, CheckCircle2, AlertCircle, BookMarked, Pencil, Trash2, X } from 'lucide-react'
-import { addBibItem, updateBibItem, deleteBibItem } from './actions'
+import Papa from 'papaparse'
+import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X } from 'lucide-react'
+import { addBibItem, updateBibItem, deleteBibItem, importBibItems } from './actions'
 
 type BibItem = {
   id: string
@@ -87,6 +88,39 @@ function StatusStamp({ tone, label }: { tone: 'ok' | 'wait' | 'warn'; label: str
   )
 }
 
+/* ── Плавный аккордеон (как на страницѣ тем) ── */
+function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+  const [render, setRender] = useState(open)
+  const [expanded, setExpanded] = useState(open)
+
+  useEffect(() => {
+    if (open) {
+      setRender(true)
+      const raf = requestAnimationFrame(() => {
+        requestAnimationFrame(() => setExpanded(true))
+      })
+      return () => cancelAnimationFrame(raf)
+    } else {
+      setExpanded(false)
+      const t = setTimeout(() => setRender(false), 500)
+      return () => clearTimeout(t)
+    }
+  }, [open])
+
+  if (!render) return null
+
+  return (
+    <div
+      aria-hidden={!open}
+      className={`grid transition-all duration-500 ease-out ${
+        expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+      }`}
+    >
+      <div className="overflow-hidden min-h-0">{children}</div>
+    </div>
+  )
+}
+
 export default function StudentBibliographyPage() {
   const [loading, setLoading] = useState(true)
   const [cycle, setCycle] = useState<{ id: string; name: string } | null>(null)
@@ -101,6 +135,11 @@ export default function StudentBibliographyPage() {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
+  // импорт ведомости CSV
+  const [showImport, setShowImport] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importResults, setImportResults] = useState<{ success: number; errors: string[] } | null>(null)
+
   useEffect(() => {
     loadAll()
   }, [])
@@ -114,6 +153,39 @@ export default function StudentBibliographyPage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [editingId])
+
+  /* ── Импорт ведомости CSV: разбор на клиенте, валидация на сервере ── */
+  const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = '' // позволяет выбрать тот же файл повторно
+    if (!windowOpen) {
+      setNotice({ type: 'err', text: 'Окно «Литература» закрыто — ведение списка недоступно' })
+      return
+    }
+
+    setNotice(null)
+    setImporting(true)
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: 'greedy',
+      complete: async (results) => {
+        const rows = results.data as Array<Record<string, string>>
+        const result = await importBibItems(rows)
+        setImportResults(result)
+        setNotice({
+          type: result.errors.length > 0 ? 'err' : 'ok',
+          text: `Импортъ оконченъ: внесено источниковъ — ${result.success}${result.errors.length > 0 ? `, не принято — ${result.errors.length}` : ''}.`,
+        })
+        loadAll()
+        setImporting(false)
+      },
+      error: (error) => {
+        setNotice({ type: 'err', text: 'Ошибка чтения файла: ' + error.message })
+        setImporting(false)
+      },
+    })
+  }
 
   const loadAll = async () => {
     const supabase = createClient()
@@ -565,8 +637,9 @@ export default function StudentBibliographyPage() {
             </div>
           </div>
 
-          {/* ── Форма нового источника (правка — въ модальномъ окнѣ) ── */}
-          {!editingId && (
+          {/* ── Форма нового источника (правка — въ модальномъ окнѣ) ──
+              карточка всегда въ потоке: если её прятать при открытой модалкѣ,
+              при закрытии страница меняетъ высоту и прокрутку «ведётъ» вверхъ */}
             <div className="relative border border-[#B08D46]/50 bg-card p-1.5 shadow-[0_1px_2px_rgba(43,33,24,0.06),0_18px_44px_-22px_rgba(43,33,24,0.3)] animate-fade-up [animation-delay:100ms]">
               <Corners />
               <div className="border border-border px-6 py-5">
@@ -574,6 +647,18 @@ export default function StudentBibliographyPage() {
                   <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
                     Новый источникъ
                   </p>
+                  <button
+                    onClick={() => { setShowImport(!showImport); setImportResults(null) }}
+                    className={`inline-flex items-center gap-1.5 h-8 px-3 font-display text-[10px] uppercase tracking-[0.18em] border transition-all duration-200 active:scale-[0.99] ${
+                      showImport
+                        ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF]'
+                        : 'bg-card border-[#B08D46]/60 text-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B]'
+                    } ${!windowOpen ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title={!windowOpen ? 'Окно «Литература» закрыто' : 'Импорт списка из файла CSV'}
+                  >
+                    <FileDown className="w-3.5 h-3.5" />
+                    Импортъ CSV
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{renderFields()}</div>
@@ -590,7 +675,80 @@ export default function StudentBibliographyPage() {
                 </div>
               </div>
             </div>
-          )}
+
+          {/* ── Импорт ведомости CSV ── */}
+          <Collapse open={showImport}>
+            <div className="relative border border-[#B08D46]/50 bg-card p-1.5 shadow-[0_1px_2px_rgba(43,33,24,0.06),0_18px_44px_-22px_rgba(43,33,24,0.35)]">
+              <Corners />
+              <div className="border border-border px-6 py-5">
+                <p className="text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                  Приложение · Импортъ источниковъ
+                </p>
+                <h2 className="font-display text-lg font-bold tracking-tight text-center mt-1.5">
+                  Перепись изъ ведомости CSV
+                </h2>
+
+                <div className="mt-5 grid md:grid-cols-2 gap-5 items-start">
+                  <div className="bg-[#FAF5E8] border border-border p-4">
+                    <p className="font-display text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-2">
+                      Форматъ ведомости
+                    </p>
+                    <code className="block font-mono text-xs text-foreground/80 leading-relaxed">
+                      kind,authors,title,source,year,url<br />
+                      book,Ивановъ И. И.,Базы данныхъ,Лань,2022,<br />
+                      article,Петровъ П. П.,Обзоръ подходовъ,Вестникъ ИТъ,2023,
+                    </code>
+                    <p className="font-quote italic text-xs text-muted-foreground mt-3">
+                      Первая строка — заголовокъ. Обязательна только колонка title.
+                      kind: book / article / url / standard / other (пусто — книга).
+                      Годъ 1900–2100; ссылка начинается съ http:// или https://.
+                      Дубли названий не принимаются.
+                    </p>
+                  </div>
+
+                  {importing ? (
+                    <div className="border border-[#B08D46]/40 bg-secondary/40 px-4 py-6 text-center">
+                      <Loader2 className="w-5 h-5 mx-auto animate-spin text-[#8C2F1B] mb-2" />
+                      <p className="font-display text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                        Канцелярія вноситъ источники...
+                      </p>
+                    </div>
+                  ) : (
+                    <label className={`block cursor-pointer border border-dashed border-[#B08D46]/60 bg-secondary/40 px-4 py-6 text-center transition-colors hover:bg-secondary hover:border-[#8C2F1B]/60 ${!windowOpen ? 'pointer-events-none opacity-50' : ''}`}>
+                      <input type="file" accept=".csv" onChange={handleCsvImport} className="hidden" disabled={!windowOpen} />
+                      <FileDown className="w-5 h-5 mx-auto text-[#8C2F1B] mb-2" />
+                      <span className="font-display text-[11px] uppercase tracking-[0.22em]">
+                        Выбрать файлъ ведомости
+                      </span>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        файлы формата .csv — годится выгрузка изъ Excel
+                      </p>
+                    </label>
+                  )}
+                </div>
+
+                {importResults && (
+                  <div className="mt-5 border border-border bg-[#FAF5E8] px-4 py-3 animate-fade-up">
+                    <p className="font-display text-[11px] uppercase tracking-[0.2em] text-[#8A6B2F]">
+                      Внесено въ списокъ: {importResults.success}
+                    </p>
+                    {importResults.errors.length > 0 && (
+                      <div className="mt-2">
+                        <p className="font-display text-[11px] uppercase tracking-[0.2em] text-[#8C2F1B]">
+                          Не принято ({importResults.errors.length}):
+                        </p>
+                        <ul className="list-disc list-inside text-sm text-red-800 max-h-40 overflow-y-auto mt-1">
+                          {importResults.errors.map((err, i) => (
+                            <li key={i}>{err}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Collapse>
 
           {/* ── Список источников ── */}
           <div className="relative">

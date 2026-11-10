@@ -229,3 +229,140 @@ export async function deleteBibItem(itemId: string) {
 
   return { success: true }
 }
+
+/* ── Импорт списка из ведомости CSV ──
+   Валидация каждого ряда — та же validateFields, что и в ручной форме;
+   дубли — по названию (без учёта регистра) против своего списка и внутри файла;
+   всё вносится со статусом pending — наставник визирует как обычно */
+const KIND_ALIASES: Record<string, string> = {
+  book: 'book', 'книга': 'book', 'книги': 'book',
+  article: 'article', 'статья': 'article', 'статьи': 'article',
+  url: 'url', 'интернет-ресурс': 'url', 'интернетъ-ресурсъ': 'url', 'сайт': 'url',
+  standard: 'standard', 'стандарт': 'standard', 'стандартъ': 'standard',
+  other: 'other', 'прочее': 'other',
+}
+
+const MAX_IMPORT_ROWS = 150
+
+export async function importBibItems(rows: Array<Record<string, string>>) {
+  const userId = await requireStudent()
+  const supabase = await createClient()
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { success: 0, errors: ['Ведомость пуста — нет строк для внесения'] }
+  }
+  if (rows.length > MAX_IMPORT_ROWS) {
+    return { success: 0, errors: [`Слишком много строк: до ${MAX_IMPORT_ROWS} за один раз`] }
+  }
+
+  // активный цикл, окно «Литература», подача с утверждённой темой — как в addBibItem
+  const { data: cycle } = await supabase
+    .from('cycles')
+    .select('id, name')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!cycle) {
+    return { success: 0, errors: ['Активного цикла нет — список недоступен'] }
+  }
+
+  const open = await isStageOpen(supabase, cycle.id, 'bibliography')
+  if (!open) {
+    return { success: 0, errors: ['Окно «Литература» закрыто — ведение списка недоступно'] }
+  }
+
+  const { data: app } = await supabase
+    .from('applications')
+    .select('id, status')
+    .eq('student_id', userId)
+    .eq('cycle_id', cycle.id)
+    .limit(1)
+    .maybeSingle()
+
+  if (!app) {
+    return { success: 0, errors: ['У вас нет подачи в этом цикле'] }
+  }
+  if (app.status !== 'approved' && app.status !== 'published') {
+    return { success: 0, errors: ['Список откроется после утверждения темы приказом'] }
+  }
+
+  // существующие названия — для проверки дублей
+  const { data: existing } = await supabase
+    .from('bibliography_items')
+    .select('title')
+    .eq('application_id', app.id)
+
+  const seen = new Set((existing ?? []).map((r) => r.title.trim().toLowerCase()))
+
+  // следующий номер позиции
+  const { data: last } = await supabase
+    .from('bibliography_items')
+    .select('position')
+    .eq('application_id', app.id)
+    .order('position', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  let position = (last?.position ?? 0) + 1
+  let successCount = 0
+  const errors: string[] = []
+
+  for (let i = 0; i < rows.length; i++) {
+    const rowNo = i + 1
+    const raw = rows[i]
+    try {
+      // заголовки колонок: trim + lower — «Title» и «title» равнозначны
+      const row: Record<string, string> = {}
+      for (const [k, v] of Object.entries(raw)) {
+        row[String(k).trim().toLowerCase()] = typeof v === 'string' ? v : String(v ?? '')
+      }
+
+      // kind: англ/рус синонимы; пусто или незнакомое — «книга»
+      const kind = KIND_ALIASES[(row.kind ?? '').trim().toLowerCase()] ?? 'book'
+      const data: BibFields = {
+        kind,
+        authors: row.authors ?? '',
+        title: row.title ?? '',
+        source: row.source ?? '',
+        year: row.year ?? '',
+        url: row.url ?? '',
+      }
+
+      const invalid = validateFields(data)
+      if (invalid) {
+        errors.push(`Строка ${rowNo}: ${invalid.toLowerCase()}`)
+        continue
+      }
+
+      const key = data.title.trim().toLowerCase()
+      if (seen.has(key)) {
+        errors.push(`Строка ${rowNo}: «${data.title.trim()}» уже есть в списке`)
+        continue
+      }
+
+      const { error } = await supabase.from('bibliography_items').insert({
+        application_id: app.id,
+        cycle_id: cycle.id,
+        student_id: userId,
+        position,
+        status: 'pending',
+        ...fieldsToRow(data),
+      })
+
+      if (error) {
+        errors.push(`Строка ${rowNo}: ${error.message}`)
+        continue
+      }
+
+      seen.add(key)
+      position++
+      successCount++
+    } catch (err: unknown) {
+      errors.push(`Строка ${rowNo}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  return { success: successCount, errors }
+}
