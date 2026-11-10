@@ -55,15 +55,27 @@ export async function reviewBibItem(data: {
   }
 
   // список принадлежит дипломнику этого наставника? (вторая линия после RLS)
+  // наставник определяется через тему: applications.supervisor_id нет,
+  // связь — topics.supervisor_id
   const { data: app } = await supabase
     .from('applications')
-    .select('id, supervisor_id')
+    .select('id, topic_id')
     .eq('id', item.application_id)
-    .eq('supervisor_id', userId)
     .limit(1)
     .maybeSingle()
 
   if (!app) {
+    return { success: false, error: 'Список этого студента вам не принадлежит' }
+  }
+
+  const { data: topic } = await supabase
+    .from('topics')
+    .select('id, supervisor_id')
+    .eq('id', app.topic_id)
+    .limit(1)
+    .maybeSingle()
+
+  if (!topic || topic.supervisor_id !== userId) {
     return { success: false, error: 'Список этого студента вам не принадлежит' }
   }
 
