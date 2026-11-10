@@ -96,3 +96,65 @@ export async function reviewBibItem(data: {
 
   return { success: true }
 }
+
+/* ── Отмена отправленного замечания: источник возвращается «на проверку» ── */
+export async function cancelReworkItem(itemId: string) {
+  const userId = await requireSupervisor()
+  const supabase = await createClient()
+
+  const { data: item } = await supabase
+    .from('bibliography_items')
+    .select('id, status, application_id')
+    .eq('id', itemId)
+    .limit(1)
+    .maybeSingle()
+
+  // RLS: чужой источник наставник не видит — «не найден» = «не ваш список»
+  if (!item) {
+    return { success: false, error: 'Источник не найден (список не ваш)' }
+  }
+  if (item.status !== 'rework') {
+    return { success: false, error: 'Отменить можно только отправленное замечание' }
+  }
+
+  // список принадлежит дипломнику этого наставника? (вторая линия после RLS)
+  // связь — topics.supervisor_id
+  const { data: app } = await supabase
+    .from('applications')
+    .select('id, topic_id')
+    .eq('id', item.application_id)
+    .limit(1)
+    .maybeSingle()
+
+  if (!app) {
+    return { success: false, error: 'Список этого студента вам не принадлежит' }
+  }
+
+  const { data: topic } = await supabase
+    .from('topics')
+    .select('id, supervisor_id')
+    .eq('id', app.topic_id)
+    .limit(1)
+    .maybeSingle()
+
+  if (!topic || topic.supervisor_id !== userId) {
+    return { success: false, error: 'Список этого студента вам не принадлежит' }
+  }
+
+  const { error } = await supabase
+    .from('bibliography_items')
+    .update({
+      status: 'pending',
+      comment: null,
+      reviewed_by: userId,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', itemId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  return { success: true }
+}

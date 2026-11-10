@@ -41,6 +41,8 @@ const ITEM_STATUS: Record<string, { label: string; tone: 'ok' | 'wait' | 'warn' 
 
 const EMPTY_FORM = { kind: 'book', authors: '', title: '', source: '', year: '', url: '' }
 
+type BibForm = typeof EMPTY_FORM
+
 /* ── Декор ── */
 function Corners() {
   const base = 'absolute w-4 h-4 border-[#B08D46] pointer-events-none'
@@ -93,14 +95,25 @@ export default function StudentBibliographyPage() {
   const [myApp, setMyApp] = useState<MyApp | null>(null)
   const [items, setItems] = useState<BibItem[]>([])
 
-  const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [form, setForm] = useState<BibForm>({ ...EMPTY_FORM })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   useEffect(() => {
     loadAll()
   }, [])
+
+  /* Esc закрывает окно правки */
+  useEffect(() => {
+    if (!editingId) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') resetForm()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editingId])
 
   const loadAll = async () => {
     const supabase = createClient()
@@ -158,6 +171,7 @@ export default function StudentBibliographyPage() {
   const resetForm = () => {
     setForm({ ...EMPTY_FORM })
     setEditingId(null)
+    setFormErrors({})
   }
 
   const startEdit = (it: BibItem) => {
@@ -170,10 +184,91 @@ export default function StudentBibliographyPage() {
       year: it.year ? String(it.year) : '',
       url: it.url || '',
     })
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+    setFormErrors({})
+  }
+
+  const setField = (k: keyof BibForm, v: string) => {
+    setForm((f) => ({ ...f, [k]: v }))
+    setFormErrors((p) => {
+      if (!p[k]) return p
+      const q = { ...p }
+      delete q[k]
+      return q
+    })
+  }
+
+  /* ── Клиентская валидация (зеркалит серверную) ── */
+  const normTitle = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
+
+  /* проверка одного поля — вызывается на onBlur, без нажатия кнопки */
+  const validateOne = (k: keyof BibForm, data: BibForm): string | undefined => {
+    switch (k) {
+      case 'title': {
+        if (data.title.trim().length < 2) return 'Укажите название источника'
+        const t = normTitle(data.title)
+        if (t && items.some((i) => i.id !== editingId && normTitle(i.title) === t)) {
+          return 'Источникъ с такимъ названіемъ уже есть въ спискѣ'
+        }
+        return undefined
+      }
+      case 'year': {
+        if (data.year.trim()) {
+          const y = Number(data.year.trim())
+          if (!Number.isInteger(y) || y < 1900 || y > 2100) {
+            return 'Годъ — цѣлое число отъ 1900 до 2100'
+          }
+        }
+        return undefined
+      }
+      case 'url': {
+        if (data.kind === 'url' && !data.url.trim()) {
+          return 'Для интернетъ-ресурса ссылка обязательна'
+        }
+        if (data.url.trim() && !/^https?:\/\/\S+$/i.test(data.url.trim())) {
+          return 'Ссылка должна начинаться съ http:// или https://'
+        }
+        return undefined
+      }
+      case 'source': {
+        if (data.kind === 'article' && !data.source.trim()) {
+          return 'Для статьи укажите журналъ / изданіе'
+        }
+        return undefined
+      }
+      default:
+        return undefined
+    }
+  }
+
+  /* полная проверка перед сохранением */
+  const clientValidate = (data: BibForm): Record<string, string> => {
+    const errors: Record<string, string> = {}
+    for (const k of ['title', 'year', 'source', 'url'] as const) {
+      const e = validateOne(k, data)
+      if (e) errors[k] = e
+    }
+    return errors
+  }
+
+  /* проверка поля при выходе изъ него */
+  const blurValidate = (k: keyof BibForm) => {
+    const e = validateOne(k, form)
+    setFormErrors((p) => {
+      const q = { ...p }
+      if (e) q[k] = e
+      else delete q[k]
+      return q
+    })
   }
 
   const saveItem = async () => {
+    const errors = clientValidate(form)
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
+      setNotice({ type: 'err', text: 'Проверьте поля — есть ошибки въ заполненіи' })
+      return
+    }
+    setFormErrors({})
     setBusy(true)
     setNotice(null)
     const result = editingId
@@ -186,7 +281,7 @@ export default function StudentBibliographyPage() {
     }
     setNotice(
       editingId
-        ? { type: 'ok', text: 'Источникъ обновлён — снова на проверкѣ у наставника' }
+        ? { type: 'ok', text: 'Источникъ обновлёнъ — снова на проверкѣ у наставника' }
         : { type: 'ok', text: 'Источникъ внесёнъ въ списокъ' }
     )
     resetForm()
@@ -218,6 +313,130 @@ export default function StudentBibliographyPage() {
   }, [items])
 
   const listAllowed = myApp && myApp.status !== 'submitted' && myApp.status !== 'in_order'
+
+  const inputCls = (field: keyof BibForm) =>
+    `w-full h-9 bg-[#FAF5E8] border ${
+      formErrors[field] ? 'border-[#8C2F1B]' : 'border-input'
+    } px-3 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 placeholder:text-muted-foreground/50`
+
+  const errText = (field: keyof BibForm) =>
+    formErrors[field] ? (
+      <p className="text-xs text-red-700 mt-1 font-quote italic">{formErrors[field]}</p>
+    ) : null
+
+  /* ── Поля формы (общие для «нового» и для окна правки) ── */
+  const renderFields = () => (
+    <>
+      <div>
+        <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
+          Вид источника
+        </label>
+        <select
+          value={form.kind}
+          onChange={(e) => setField('kind', e.target.value)}
+          disabled={busy}
+          className={inputCls('kind')}
+        >
+          {Object.entries(KIND_LABELS).map(([k, label]) => (
+            <option key={k} value={k}>{label}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
+          Годъ изданія (не обязательно)
+        </label>
+        <input
+          type="text"
+          value={form.year}
+          onChange={(e) => setField('year', e.target.value)}
+          onBlur={() => blurValidate('year')}
+          maxLength={4}
+          placeholder="2025"
+          disabled={busy}
+          className={inputCls('year')}
+        />
+        {errText('year')}
+      </div>
+      <div className="md:col-span-2">
+        <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
+          Авторы (не обязательно)
+        </label>
+        <input
+          type="text"
+          value={form.authors}
+          onChange={(e) => setField('authors', e.target.value)}
+          maxLength={300}
+          placeholder="Ивановъ И. И., Петровъ П. П."
+          disabled={busy}
+          className={inputCls('authors')}
+        />
+        {errText('authors')}
+      </div>
+      <div className="md:col-span-2">
+        <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
+          Названіе <span className="text-[#8C2F1B]">*</span>
+        </label>
+        <input
+          type="text"
+          value={form.title}
+          onChange={(e) => setField('title', e.target.value)}
+          onBlur={() => blurValidate('title')}
+          maxLength={300}
+          placeholder="Основы проектированія информационныхъ системъ"
+          disabled={busy}
+          className={inputCls('title')}
+        />
+        {errText('title')}
+      </div>
+      <div className="md:col-span-2">
+        <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
+          Изданіе / журналъ / сайтъ{' '}
+          {form.kind === 'article' ? (
+            <span className="text-[#8C2F1B]">*</span>
+          ) : (
+            <span>(не обязательно)</span>
+          )}
+        </label>
+        <input
+          type="text"
+          value={form.source}
+          onChange={(e) => setField('source', e.target.value)}
+          onBlur={() => blurValidate('source')}
+          maxLength={300}
+          placeholder={
+            form.kind === 'article'
+              ? 'Известия ВолгГТУ'
+              : 'Издательство МГТУ, г. Москва'
+          }
+          disabled={busy}
+          className={inputCls('source')}
+        />
+        {errText('source')}
+      </div>
+      <div className="md:col-span-2">
+        <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
+          Ссылка{' '}
+          {form.kind === 'url' ? (
+            <span className="text-[#8C2F1B]">*</span>
+          ) : (
+            <span>(для интернетъ-ресурсовъ)</span>
+          )}
+        </label>
+        <input
+          type="text"
+          value={form.url}
+          onChange={(e) => setField('url', e.target.value)}
+          onBlur={() => blurValidate('url')}
+          maxLength={500}
+          placeholder="https://example.com/article"
+          disabled={busy}
+          className={inputCls('url')}
+        />
+        {errText('url')}
+      </div>
+    </>
+  )
 
   if (loading) {
     return (
@@ -346,119 +565,32 @@ export default function StudentBibliographyPage() {
             </div>
           </div>
 
-          {/* ── Форма ── */}
-          <div className="relative border border-[#B08D46]/50 bg-card p-1.5 shadow-[0_1px_2px_rgba(43,33,24,0.06),0_18px_44px_-22px_rgba(43,33,24,0.3)] animate-fade-up [animation-delay:100ms]">
-            <Corners />
-            <div className="border border-border px-6 py-5">
-              <div className="flex items-center justify-between pb-3 border-b border-border mb-4">
-                <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                  {editingId ? 'Правка источника' : 'Новый источникъ'}
-                </p>
-                {editingId && (
+          {/* ── Форма нового источника (правка — въ модальномъ окнѣ) ── */}
+          {!editingId && (
+            <div className="relative border border-[#B08D46]/50 bg-card p-1.5 shadow-[0_1px_2px_rgba(43,33,24,0.06),0_18px_44px_-22px_rgba(43,33,24,0.3)] animate-fade-up [animation-delay:100ms]">
+              <Corners />
+              <div className="border border-border px-6 py-5">
+                <div className="flex items-center justify-between pb-3 border-b border-border mb-4">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                    Новый источникъ
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{renderFields()}</div>
+
+                <div className="flex justify-end mt-5">
                   <button
-                    onClick={resetForm}
-                    className="inline-flex items-center gap-1.5 text-xs font-quote italic text-muted-foreground hover:text-[#8C2F1B] transition-colors"
+                    onClick={saveItem}
+                    disabled={busy || !windowOpen}
+                    title={!windowOpen ? 'Окно закрыто' : undefined}
+                    className="border border-[#6E2415] bg-[#8C2F1B] text-[#F3EDDF] font-display text-[10px] uppercase tracking-[0.18em] px-5 py-2.5 transition-all duration-200 hover:bg-[#7A2715] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#8C2F1B]"
                   >
-                    <X className="w-3.5 h-3.5" /> отмѣнить правку
+                    {busy ? 'Записывается...' : 'Добавить въ списокъ'}
                   </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
-                    Вид источника
-                  </label>
-                  <select
-                    value={form.kind}
-                    onChange={(e) => setForm({ ...form, kind: e.target.value })}
-                    disabled={busy}
-                    className="w-full h-9 bg-[#FAF5E8] border border-input px-3 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10"
-                  >
-                    {Object.entries(KIND_LABELS).map(([k, label]) => (
-                      <option key={k} value={k}>{label}</option>
-                    ))}
-                  </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
-                    Годъ изданія (не обязателно)
-                  </label>
-                  <input
-                    type="text"
-                    value={form.year}
-                    onChange={(e) => setForm({ ...form, year: e.target.value })}
-                    placeholder="2025"
-                    disabled={busy}
-                    className="w-full h-9 bg-[#FAF5E8] border border-input px-3 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 placeholder:text-muted-foreground/50"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
-                    Авторы (не обязателно)
-                  </label>
-                  <input
-                    type="text"
-                    value={form.authors}
-                    onChange={(e) => setForm({ ...form, authors: e.target.value })}
-                    placeholder="Ивановъ И. И., Петровъ П. П."
-                    disabled={busy}
-                    className="w-full h-9 bg-[#FAF5E8] border border-input px-3 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 placeholder:text-muted-foreground/50"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
-                    Названіе
-                  </label>
-                  <input
-                    type="text"
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    placeholder="Основы проектированія информационныхъ системъ"
-                    disabled={busy}
-                    className="w-full h-9 bg-[#FAF5E8] border border-input px-3 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 placeholder:text-muted-foreground/50"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
-                    Изданіе / журналъ / сайтъ (не обязателно)
-                  </label>
-                  <input
-                    type="text"
-                    value={form.source}
-                    onChange={(e) => setForm({ ...form, source: e.target.value })}
-                    placeholder="Издательство МГТУ, г. Москва"
-                    disabled={busy}
-                    className="w-full h-9 bg-[#FAF5E8] border border-input px-3 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 placeholder:text-muted-foreground/50"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
-                    Ссылка (для интернетъ-ресурсовъ)
-                  </label>
-                  <input
-                    type="text"
-                    value={form.url}
-                    onChange={(e) => setForm({ ...form, url: e.target.value })}
-                    placeholder="https://example.com/article"
-                    disabled={busy}
-                    className="w-full h-9 bg-[#FAF5E8] border border-input px-3 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 placeholder:text-muted-foreground/50"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end mt-5">
-                <button
-                  onClick={saveItem}
-                  disabled={busy || !windowOpen}
-                  title={!windowOpen ? 'Окно закрыто' : undefined}
-                  className="border border-[#6E2415] bg-[#8C2F1B] text-[#F3EDDF] font-display text-[10px] uppercase tracking-[0.18em] px-5 py-2.5 transition-all duration-200 hover:bg-[#7A2715] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#8C2F1B]"
-                >
-                  {busy ? 'Записывается...' : editingId ? 'Сохранить правку' : 'Добавить въ списокъ'}
-                </button>
               </div>
             </div>
-          </div>
+          )}
 
           {/* ── Список источников ── */}
           <div className="relative">
@@ -560,6 +692,56 @@ export default function StudentBibliographyPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ── Модальное окно правки ── */}
+      {editingId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#2B2118]/50 animate-fade-in"
+          onClick={resetForm}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full max-w-2xl border border-[#B08D46]/60 bg-card p-1.5 shadow-[0_1px_2px_rgba(43,33,24,0.06),0_30px_70px_-20px_rgba(43,33,24,0.5)] animate-fade-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Corners />
+            <div className="border border-border px-6 py-5 max-h-[85vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-3 border-b border-border mb-4">
+                <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                  Правка источника
+                </p>
+                <button
+                  onClick={resetForm}
+                  title="Закрыть"
+                  className="p-1.5 border border-border text-muted-foreground hover:text-[#8C2F1B] hover:border-[#8C2F1B]/50 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{renderFields()}</div>
+
+              <div className="flex items-center justify-end gap-4 mt-5">
+                <button
+                  onClick={resetForm}
+                  className="text-xs font-quote italic text-muted-foreground hover:text-[#8C2F1B] transition-colors"
+                >
+                  отмѣнить
+                </button>
+                <button
+                  onClick={saveItem}
+                  disabled={busy || !windowOpen}
+                  title={!windowOpen ? 'Окно закрыто' : undefined}
+                  className="border border-[#6E2415] bg-[#8C2F1B] text-[#F3EDDF] font-display text-[10px] uppercase tracking-[0.18em] px-5 py-2.5 transition-all duration-200 hover:bg-[#7A2715] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#8C2F1B]"
+                >
+                  {busy ? 'Записывается...' : 'Сохранить правку'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Подпись ── */}

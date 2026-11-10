@@ -2,8 +2,8 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect, useMemo } from 'react'
-import { Loader2, CheckCircle2, AlertCircle, BookMarked, RotateCcw } from 'lucide-react'
-import { reviewBibItem } from './actions'
+import { Loader2, CheckCircle2, AlertCircle, BookMarked, RotateCcw, ChevronDown } from 'lucide-react'
+import { reviewBibItem, cancelReworkItem } from './actions'
 
 type MyAppRow = {
   id: string
@@ -76,11 +76,48 @@ function StatusStamp({ tone, label }: { tone: 'ok' | 'wait' | 'warn'; label: str
   )
 }
 
+/* ── Плавный аккордеон — тот же, что в циклахъ / приказахъ / темахъ ──
+   Панель остается в DOM во время сворачивания (500 мс),
+   затем убирается — отступы не «дырявят» страницу */
+function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+  const [render, setRender] = useState(open)
+  const [expanded, setExpanded] = useState(open)
+
+  useEffect(() => {
+    if (open) {
+      setRender(true)
+      // двойной кадр: сначала рендер в свернутом виде, потом раскрытие
+      const raf = requestAnimationFrame(() => {
+        requestAnimationFrame(() => setExpanded(true))
+      })
+      return () => cancelAnimationFrame(raf)
+    } else {
+      setExpanded(false)
+      const t = setTimeout(() => setRender(false), 500)
+      return () => clearTimeout(t)
+    }
+  }, [open])
+
+  if (!render) return null
+
+  return (
+    <div
+      aria-hidden={!open}
+      className={`grid transition-all duration-500 ease-out ${
+        expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+      }`}
+    >
+      <div className="overflow-hidden min-h-0">{children}</div>
+    </div>
+  )
+}
+
 export default function SupervisorBibliographyPage() {
   const [loading, setLoading] = useState(true)
   const [cycle, setCycle] = useState<{ id: string; name: string } | null>(null)
   const [apps, setApps] = useState<MyAppRow[]>([])
   const [items, setItems] = useState<BibItem[]>([])
+  const [expandedApps, setExpandedApps] = useState<Record<string, boolean>>({})
 
   const [reworkFor, setReworkFor] = useState<string | null>(null)
   const [comment, setComment] = useState('')
@@ -137,6 +174,10 @@ export default function SupervisorBibliographyPage() {
     setLoading(false)
   }
 
+  const toggleApp = (id: string) => {
+    setExpandedApps((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
   const review = async (itemId: string, decision: 'approved' | 'rework', note?: string) => {
     setBusyId(itemId)
     setNotice(null)
@@ -157,6 +198,19 @@ export default function SupervisorBibliographyPage() {
     )
     setReworkFor(null)
     setComment('')
+    loadAll()
+  }
+
+  const cancelRework = async (itemId: string) => {
+    setBusyId(itemId)
+    setNotice(null)
+    const result = await cancelReworkItem(itemId)
+    setBusyId(null)
+    if (!result.success) {
+      setNotice({ type: 'err', text: result.error || 'Ошибка отмены' })
+      return
+    }
+    setNotice({ type: 'ok', text: 'Замѣчаніе отменено — источникъ снова на проверкѣ' })
     loadAll()
   }
 
@@ -259,139 +313,186 @@ export default function SupervisorBibliographyPage() {
               {apps.map((a) => {
                 const list = itemsOf[a.id] || []
                 const approved = list.filter((i) => i.status === 'approved').length
+                const pending = list.filter((i) => i.status === 'pending').length
+                const expanded = !!expandedApps[a.id]
                 const listLabel =
                   list.length === 0
                     ? 'списокъ не начатъ'
-                    : `${list.length} источн. · принято ${approved}`
+                    : [
+                        `${list.length} источн.`,
+                        pending > 0 ? `${pending} на проверкѣ` : null,
+                        `принято ${approved}`,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')
                 return (
                   <div key={a.id} className="border border-border/80 px-4 py-4 bg-[#FAF5E8]/40">
-                    <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-border/60">
+                    {/* шапка студента — клик раскрывает списокъ */}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={expanded}
+                      onClick={() => toggleApp(a.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          toggleApp(a.id)
+                        }
+                      }}
+                      className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-border/60 cursor-pointer select-none group/app"
+                    >
                       <div className="min-w-0">
-                        <p className="font-quote font-bold text-[15px]">{a.student?.full_name || '—'}</p>
+                        <p className="font-quote font-bold text-[15px] transition-colors group-hover/app:text-[#8C2F1B]">
+                          {a.student?.full_name || '—'}
+                        </p>
                         <p className="text-xs text-muted-foreground font-quote italic mt-0.5 truncate">
                           «{a.final_title}»
                         </p>
                       </div>
-                      <StatusStamp
-                        tone={list.length === 0 ? 'wait' : approved === list.length ? 'ok' : 'warn'}
-                        label={listLabel}
-                      />
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <StatusStamp
+                          tone={list.length === 0 ? 'wait' : approved === list.length ? 'ok' : 'warn'}
+                          label={listLabel}
+                        />
+                        <span
+                          title={expanded ? 'Свернуть списокъ' : 'Раскрыть списокъ'}
+                          className="p-1.5 border border-[#B08D46]/50 text-muted-foreground group-hover/app:text-[#8C2F1B] group-hover/app:border-[#8C2F1B] transition-colors"
+                        >
+                          <ChevronDown
+                            className={`w-4 h-4 transition-transform duration-500 ${expanded ? 'rotate-180' : ''}`}
+                          />
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="divide-y divide-border/60">
-                      {list.map((it) => {
-                        const st = ITEM_STATUS[it.status] ?? { label: it.status, tone: 'wait' as const }
-                        return (
-                          <div key={it.id} className="py-3.5 flex items-start gap-3">
-                            <span className="font-display text-sm text-[#B08D46] w-6 shrink-0 text-right pt-0.5">
-                              {it.position}.
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="font-quote text-sm leading-snug">
-                                {it.authors && <span className="font-bold">{it.authors} </span>}
-                                {it.title}
-                                {it.source && <span className="text-muted-foreground"> — {it.source}</span>}
-                                {it.year && <span className="text-muted-foreground">, {it.year}</span>}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                                <span className="text-xs text-muted-foreground font-quote italic">
-                                  {KIND_LABELS[it.kind] ?? it.kind}
-                                </span>
-                                {it.url && (
-                                  <a
-                                    href={it.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-xs text-[#8A6B2F] underline underline-offset-2 hover:text-[#8C2F1B] break-all"
-                                  >
-                                    ссылка
-                                  </a>
-                                )}
-                              </div>
-                              {it.status === 'rework' && it.comment && (
-                                <p className="font-quote italic text-xs text-red-900 mt-1.5">
-                                  замѣчаніе: {it.comment}
+                    {/* списокъ источниковъ — плавное раскрытие */}
+                    <Collapse open={expanded}>
+                      <div className="divide-y divide-border/60">
+                        {list.map((it) => {
+                          const st = ITEM_STATUS[it.status] ?? { label: it.status, tone: 'wait' as const }
+                          return (
+                            <div key={it.id} className="py-3.5 flex items-start gap-3">
+                              <span className="font-display text-sm text-[#B08D46] w-6 shrink-0 text-right pt-0.5">
+                                {it.position}.
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-quote text-sm leading-snug">
+                                  {it.authors && <span className="font-bold">{it.authors} </span>}
+                                  {it.title}
+                                  {it.source && <span className="text-muted-foreground"> — {it.source}</span>}
+                                  {it.year && <span className="text-muted-foreground">, {it.year}</span>}
                                 </p>
-                              )}
-
-                              {/* форма замечания */}
-                              {reworkFor === it.id && (
-                                <div className="mt-2.5 space-y-2">
-                                  <textarea
-                                    value={comment}
-                                    onChange={(e) => setComment(e.target.value)}
-                                    rows={2}
-                                    placeholder="Что исправить: ГОСТ, полнота, актуальность..."
-                                    className="w-full bg-[#FAF5E8] border border-input px-3 py-2 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 placeholder:text-muted-foreground/50"
-                                  />
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={() => review(it.id, 'rework', comment)}
-                                      disabled={busyId === it.id || !comment.trim()}
-                                      className="border border-[#6E2415] bg-[#8C2F1B] text-[#F3EDDF] font-display text-[10px] uppercase tracking-[0.18em] px-3 py-2 transition-colors hover:bg-[#7A2715] disabled:opacity-40 disabled:cursor-not-allowed"
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                                  <span className="text-xs text-muted-foreground font-quote italic">
+                                    {KIND_LABELS[it.kind] ?? it.kind}
+                                  </span>
+                                  {it.url && (
+                                    <a
+                                      href={it.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-xs text-[#8A6B2F] underline underline-offset-2 hover:text-[#8C2F1B] break-all"
                                     >
-                                      {busyId === it.id ? 'Отправляется...' : 'Отправить замѣчаніе'}
+                                      ссылка
+                                    </a>
+                                  )}
+                                </div>
+                                {it.status === 'rework' && it.comment && (
+                                  <p className="font-quote italic text-xs text-red-900 mt-1.5">
+                                    замѣчаніе: {it.comment}
+                                  </p>
+                                )}
+
+                                {/* форма замечания — выезжает плавно */}
+                                <Collapse open={reworkFor === it.id}>
+                                  <div className="mt-2.5 space-y-2">
+                                    <textarea
+                                      value={comment}
+                                      onChange={(e) => setComment(e.target.value)}
+                                      rows={2}
+                                      placeholder="Что исправить: ГОСТ, полнота, актуальность..."
+                                      className="w-full bg-[#FAF5E8] border border-input px-3 py-2 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 placeholder:text-muted-foreground/50"
+                                    />
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => review(it.id, 'rework', comment)}
+                                        disabled={busyId === it.id || !comment.trim()}
+                                        className="border border-[#6E2415] bg-[#8C2F1B] text-[#F3EDDF] font-display text-[10px] uppercase tracking-[0.18em] px-3 py-2 transition-colors hover:bg-[#7A2715] disabled:opacity-40 disabled:cursor-not-allowed"
+                                      >
+                                        {busyId === it.id ? 'Отправляется...' : 'Отправить замѣчаніе'}
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setReworkFor(null)
+                                          setComment('')
+                                        }}
+                                        className="inline-flex items-center gap-1 text-xs font-quote italic text-muted-foreground hover:text-[#8C2F1B] transition-colors"
+                                      >
+                                        <RotateCcw className="w-3 h-3" /> отмѣнить
+                                      </button>
+                                    </div>
+                                  </div>
+                                </Collapse>
+                              </div>
+
+                              <div className="flex flex-col items-end gap-2 shrink-0">
+                                {/* штамп только для принятых и замечаний — у «на проверкѣ» остались кнопки */}
+                                {it.status !== 'pending' && <StatusStamp tone={st.tone} label={st.label} />}
+                                {it.status === 'pending' && (
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => review(it.id, 'approved')}
+                                      disabled={busyId === it.id}
+                                      title="Принять источникъ"
+                                      className="border border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F] font-display text-[10px] uppercase tracking-[0.18em] px-3 py-2 transition-colors hover:bg-[#B08D46]/20 disabled:opacity-40"
+                                    >
+                                      Принять
                                     </button>
                                     <button
                                       onClick={() => {
-                                        setReworkFor(null)
+                                        setReworkFor(it.id)
                                         setComment('')
                                       }}
-                                      className="inline-flex items-center gap-1 text-xs font-quote italic text-muted-foreground hover:text-[#8C2F1B] transition-colors"
+                                      disabled={busyId === it.id}
+                                      title="Вернуть с замечаніемъ"
+                                      className="border border-[#8C2F1B]/60 bg-[#8C2F1B]/5 text-[#8C2F1B] font-display text-[10px] uppercase tracking-[0.18em] px-3 py-2 transition-colors hover:bg-[#8C2F1B]/10 disabled:opacity-40"
                                     >
-                                      <RotateCcw className="w-3 h-3" /> отмѣнить
+                                      Замѣчаніе
                                     </button>
                                   </div>
-                                </div>
-                              )}
+                                )}
+                                {it.status === 'rework' && (
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => review(it.id, 'approved')}
+                                      disabled={busyId === it.id}
+                                      title="Принять источникъ"
+                                      className="border border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F] font-display text-[10px] uppercase tracking-[0.18em] px-3 py-2 transition-colors hover:bg-[#B08D46]/20 disabled:opacity-40"
+                                    >
+                                      Принять
+                                    </button>
+                                    <button
+                                      onClick={() => cancelRework(it.id)}
+                                      disabled={busyId === it.id}
+                                      title="Отменить замѣчаніе — источникъ снова «на проверкѣ»"
+                                      className="inline-flex items-center gap-1 border border-border bg-muted/40 text-muted-foreground font-display text-[10px] uppercase tracking-[0.18em] px-3 py-2 transition-colors hover:text-[#8C2F1B] hover:border-[#8C2F1B]/50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                      <RotateCcw className="w-3 h-3" /> Отмѣнить замѣчаніе
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
+                          )
+                        })}
 
-                            <div className="flex flex-col items-end gap-2 shrink-0">
-                              <StatusStamp tone={st.tone} label={st.label} />
-                              {it.status === 'pending' && (
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    onClick={() => review(it.id, 'approved')}
-                                    disabled={busyId === it.id}
-                                    title="Принять источникъ"
-                                    className="border border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F] font-display text-[10px] uppercase tracking-[0.18em] px-3 py-2 transition-colors hover:bg-[#B08D46]/20 disabled:opacity-40"
-                                  >
-                                    Принять
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setReworkFor(it.id)
-                                      setComment('')
-                                    }}
-                                    disabled={busyId === it.id}
-                                    title="Вернуть с замечаніемъ"
-                                    className="border border-[#8C2F1B]/60 bg-[#8C2F1B]/5 text-[#8C2F1B] font-display text-[10px] uppercase tracking-[0.18em] px-3 py-2 transition-colors hover:bg-[#8C2F1B]/10 disabled:opacity-40"
-                                  >
-                                    Замѣчаніе
-                                  </button>
-                                </div>
-                              )}
-                              {it.status === 'rework' && (
-                                <button
-                                  onClick={() => review(it.id, 'approved')}
-                                  disabled={busyId === it.id}
-                                  title="Принять источникъ"
-                                  className="border border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F] font-display text-[10px] uppercase tracking-[0.18em] px-3 py-2 transition-colors hover:bg-[#B08D46]/20 disabled:opacity-40"
-                                >
-                                  Принять
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-
-                      {list.length === 0 && (
-                        <p className="py-4 font-quote italic text-muted-foreground text-sm">
-                          Студентъ ещё не вносилъ источники
-                        </p>
-                      )}
-                    </div>
+                        {list.length === 0 && (
+                          <p className="py-4 font-quote italic text-muted-foreground text-sm">
+                            Студентъ ещё не вносилъ источники
+                          </p>
+                        )}
+                      </div>
+                    </Collapse>
                   </div>
                 )
               })}
