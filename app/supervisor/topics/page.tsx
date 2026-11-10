@@ -844,8 +844,10 @@ export default function SupervisorTopicsPage() {
                   </select>
                 </div>
 
-                <div className="space-y-1.5">
-                  <FieldLabel htmlFor="sub-topic">Тема (из ваших)</FieldLabel>
+                  <div className="space-y-1.5">
+                  <FieldLabel htmlFor="sub-topic">
+                    {myRole === 'deputy' ? 'Тема (из каталога кафедры)' : 'Тема (из ваших)'}
+                  </FieldLabel>
                   <select
                     id="sub-topic"
                     value={submitTopicId}
