@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect, useMemo } from 'react'
 import { Loader2, CheckCircle2, AlertCircle, BookMarked, RotateCcw, ChevronDown } from 'lucide-react'
-import { reviewBibItem, cancelReworkItem } from './actions'
+import { reviewBibItem, cancelReworkItem, approveAllBibItems } from './actions'
 
 type MyAppRow = {
   id: string
@@ -214,6 +214,20 @@ export default function SupervisorBibliographyPage() {
     loadAll()
   }
 
+  /* принять всѣ «на проверкѣ» у одного студента разомъ */
+  const approveAll = async (appId: string) => {
+    setBusyId(appId)
+    setNotice(null)
+    const result = await approveAllBibItems(appId)
+    setBusyId(null)
+    if (!result.success) {
+      setNotice({ type: 'err', text: result.error || 'Ошибка визы' })
+      return
+    }
+    setNotice({ type: 'ok', text: `Принято разомъ источниковъ: ${result.count}` })
+    loadAll()
+  }
+
   const itemsOf = useMemo(() => {
     const byApp: Record<string, BibItem[]> = {}
     for (const it of items) {
@@ -350,6 +364,20 @@ export default function SupervisorBibliographyPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2.5 shrink-0">
+                        {pending > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              approveAll(a.id)
+                            }}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            disabled={busyId === a.id}
+                            title="Принять разомъ всѣ источники «на проверкѣ»"
+                            className="border border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F] font-display text-[10px] uppercase tracking-[0.18em] px-3 py-2 transition-colors hover:bg-[#B08D46]/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {busyId === a.id ? 'Принимается...' : 'Принять всѣ'}
+                          </button>
+                        )}
                         <StatusStamp
                           tone={list.length === 0 ? 'wait' : approved === list.length ? 'ok' : 'warn'}
                           label={listLabel}
@@ -366,7 +394,7 @@ export default function SupervisorBibliographyPage() {
                     </div>
 
                     {/* списокъ источниковъ — плавное раскрытие */}
-                    <Collapse open={expanded}>
+<Collapse open={expanded}>
                       <div className="divide-y divide-border/60">
                         {list.map((it) => {
                           const st = ITEM_STATUS[it.status] ?? { label: it.status, tone: 'wait' as const }

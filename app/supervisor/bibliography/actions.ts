@@ -158,3 +158,61 @@ export async function cancelReworkItem(itemId: string) {
 
   return { success: true }
 }
+
+/* ── Виза разомъ: принять всѣ источники «на проверкѣ» у одного студента ── */
+export async function approveAllBibItems(applicationId: string) {
+  const userId = await requireSupervisor()
+  const supabase = await createClient()
+
+  // список принадлежит дипломнику этого наставника? (вторая линия после RLS)
+  const { data: app } = await supabase
+    .from('applications')
+    .select('id, topic_id')
+    .eq('id', applicationId)
+    .limit(1)
+    .maybeSingle()
+
+  if (!app) {
+    return { success: false, error: 'Список этого студента вам не принадлежит' }
+  }
+
+  const { data: topic } = await supabase
+    .from('topics')
+    .select('id, supervisor_id')
+    .eq('id', app.topic_id)
+    .limit(1)
+    .maybeSingle()
+
+  if (!topic || topic.supervisor_id !== userId) {
+    return { success: false, error: 'Список этого студента вам не принадлежит' }
+  }
+
+  // принимаем только «на проверкѣ» — замѣчаніе и принятое не трогаем
+  const { data: targets } = await supabase
+    .from('bibliography_items')
+    .select('id')
+    .eq('application_id', applicationId)
+    .eq('status', 'pending')
+
+  if (!targets || targets.length === 0) {
+    return { success: false, error: 'Нет источников на проверке' }
+  }
+
+  const { data: updated, error } = await supabase
+    .from('bibliography_items')
+    .update({
+      status: 'approved',
+      comment: null,
+      reviewed_by: userId,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .in('id', targets.map((t) => t.id))
+    .select('id')
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  return { success: true, count: updated?.length ?? targets.length }
+}

@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Papa from 'papaparse'
 import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X } from 'lucide-react'
 import { addBibItem, updateBibItem, deleteBibItem, importBibItems } from './actions'
@@ -137,6 +137,7 @@ export default function StudentBibliographyPage() {
 
   // импорт ведомости CSV
   const [showImport, setShowImport] = useState(false)
+  const importRef = useRef<HTMLDivElement>(null)
   const [importing, setImporting] = useState(false)
   const [importResults, setImportResults] = useState<{ success: number; errors: string[] } | null>(null)
 
@@ -648,7 +649,15 @@ export default function StudentBibliographyPage() {
                     Новый источникъ
                   </p>
                   <button
-                    onClick={() => { setShowImport(!showImport); setImportResults(null) }}
+                                        onClick={() => {
+                      const opening = !showImport
+                      setShowImport(opening)
+                      setImportResults(null)
+                      if (opening) {
+                        // «Приложеніе» разворачивается — прокрутка сама подводитъ къ нему
+                        setTimeout(() => importRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+                      }
+                    }}
                     className={`inline-flex items-center gap-1.5 h-8 px-3 font-display text-[10px] uppercase tracking-[0.18em] border transition-all duration-200 active:scale-[0.99] ${
                       showImport
                         ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF]'
@@ -677,7 +686,8 @@ export default function StudentBibliographyPage() {
             </div>
 
           {/* ── Импорт ведомости CSV ── */}
-          <Collapse open={showImport}>
+          <div ref={importRef} className="scroll-mt-6">
+           <Collapse open={showImport}>
             <div className="relative border border-[#B08D46]/50 bg-card p-1.5 shadow-[0_1px_2px_rgba(43,33,24,0.06),0_18px_44px_-22px_rgba(43,33,24,0.35)]">
               <Corners />
               <div className="border border-border px-6 py-5">
@@ -749,6 +759,7 @@ export default function StudentBibliographyPage() {
               </div>
             </div>
           </Collapse>
+          </div>
 
           {/* ── Список источников ── */}
           <div className="relative">
