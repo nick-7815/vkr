@@ -66,15 +66,18 @@ export async function submitOwnApplication(topicId: string) {
     return { success: false, error: 'Окно «Каталогъ и подача» закрыто — подача недоступна' }
   }
 
-  // тема утверждена?
+  // тема свободна? (catalog = в каталоге; approved = уже утверждена приказом)
   const { data: topic } = await supabase
     .from('topics')
     .select('id, title, status')
     .eq('id', topicId)
     .maybeSingle()
 
-  if (!topic || topic.status !== 'approved') {
-    return { success: false, error: 'Тема не найдена или не утверждена' }
+  if (!topic) {
+    return { success: false, error: 'Тема не найдена' }
+  }
+  if (topic.status !== 'catalog') {
+    return { success: false, error: 'Тема недоступна для подачи (уже утверждена приказом)' }
   }
 
   // своя подача уже есть? (RLS показывает только свои записи)

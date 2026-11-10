@@ -92,18 +92,20 @@ export default function StudentTopicsPage() {
     const { data: t } = await supabase
       .from('topics')
       .select('id, title, supervisor:profiles(full_name)')
-      .eq('status', 'approved')
+      .eq('status', 'catalog')
       .order('title', { ascending: true })
         setTopics((t as unknown as Topic[]) || [])
 
     if (c) {
+      const { data: { user } } = await supabase.auth.getUser()
       const { data: app } = await supabase
         .from('applications')
         .select('id, status, final_title, rework_note, topic_id, topic:topics(title, supervisor:profiles(full_name))')
         .eq('cycle_id', c.id)
+        .eq('student_id', user?.id ?? '00000000-0000-0000-0000-000000000000')
         .limit(1)
         .maybeSingle()
-        setMyApp((app as unknown as MyApp) || null)
+      setMyApp((app as unknown as MyApp) || null)
     }
 
     setLoading(false)
@@ -168,7 +170,7 @@ export default function StudentTopicsPage() {
           Выборъ темы
         </h1>
         <p className="font-quote italic text-muted-foreground mt-2">
-          утверждённые темы кафедры — подача только въ открытое окно
+          свободные темы наставниковъ — подача только въ открытое окно
         </p>
       </div>
 
@@ -288,7 +290,7 @@ export default function StudentTopicsPage() {
           <div className="border border-border px-6 py-5">
             <div className="flex flex-wrap items-center gap-4 pb-3 border-b border-border mb-2">
               <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                Каталогъ утверждённыхъ темъ
+                Каталогъ свободныхъ темъ
               </p>
               <div className="relative flex-1 min-w-[220px] max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 pointer-events-none" />
@@ -347,7 +349,7 @@ export default function StudentTopicsPage() {
                   <ScrollText className="w-5 h-5 mx-auto text-muted-foreground/50 mb-2" />
                   <p className="font-quote italic text-muted-foreground text-sm">
                     {topics.length === 0
-                      ? 'Каталогъ пустъ — утверждённыхъ темъ пока нетъ'
+                      ? 'Каталогъ пустъ — свободныхъ темъ пока нетъ'
                       : 'по запросу ничего не найдено'}
                   </p>
                 </div>
