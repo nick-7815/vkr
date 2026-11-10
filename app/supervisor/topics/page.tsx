@@ -537,28 +537,32 @@ export default function SupervisorTopicsPage() {
         </div>
 
         <div className="flex flex-col items-end gap-2.5">
-          <button
-            onClick={toggleForm}
-            className={`inline-flex items-center gap-2.5 h-11 px-5 font-display text-[11px] uppercase tracking-[0.2em] border transition-all duration-200 active:scale-[0.99] ${
-              showForm
-                ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF]'
-                : 'bg-card border-[#B08D46]/60 text-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B]'
-            }`}
-          >
-            <Plus className="w-4 h-4" />
-            Вписать тему
-          </button>
-          <button
-            onClick={() => { if (importing) return; setShowImport(!showImport); setNotice(null); setImportResults(null) }}
-            className={`inline-flex items-center gap-2.5 h-11 px-5 font-display text-[11px] uppercase tracking-[0.2em] border transition-all duration-200 active:scale-[0.99] ${
-              showImport
-                ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF]'
-                : 'bg-card border-[#B08D46]/60 text-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B]'
-            }`}
-          >
-            <FileDown className="w-4 h-4" />
-            Импортъ CSV
-          </button>
+          {myRole !== 'deputy' && (
+            <button
+              onClick={toggleForm}
+              className={`inline-flex items-center gap-2.5 h-11 px-5 font-display text-[11px] uppercase tracking-[0.2em] border transition-all duration-200 active:scale-[0.99] ${
+                showForm
+                  ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF]'
+                  : 'bg-card border-[#B08D46]/60 text-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B]'
+              }`}
+            >
+              <Plus className="w-4 h-4" />
+              Вписать тему
+            </button>
+          )}
+          {myRole !== 'deputy' && (
+            <button
+              onClick={() => { if (importing) return; setShowImport(!showImport); setNotice(null); setImportResults(null) }}
+              className={`inline-flex items-center gap-2.5 h-11 px-5 font-display text-[11px] uppercase tracking-[0.2em] border transition-all duration-200 active:scale-[0.99] ${
+                showImport
+                  ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF]'
+                  : 'bg-card border-[#B08D46]/60 text-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B]'
+              }`}
+            >
+              <FileDown className="w-4 h-4" />
+              Импортъ CSV
+            </button>
+          )}
                     <button
             onClick={() => { if (submitBusy) return; setShowSubmit(!showSubmit); setNotice(null); setSubmitError(null) }}
             className={`inline-flex items-center gap-2.5 h-11 px-5 font-display text-[11px] uppercase tracking-[0.2em] border transition-all duration-200 active:scale-[0.99] ${
@@ -810,7 +814,9 @@ export default function SupervisorTopicsPage() {
                 Подать студента
               </h2>
               <p className="font-quote italic text-sm text-muted-foreground text-center mt-2">
-                Студент + тема из ваших — формулировка пойдёт в приказ
+                {myRole === 'deputy'
+                  ? 'Студент + тема из каталога кафедры — формулировка пойдёт в приказ'
+                  : 'Студент + тема из ваших — формулировка пойдёт в приказ'}
               </p>
 
               {submitError && (
@@ -986,7 +992,9 @@ export default function SupervisorTopicsPage() {
               <BookOpen className="w-8 h-8 mx-auto text-[#B08D46]/60 mb-4" />
               <p className="font-display text-lg font-bold">Каталогъ пустъ</p>
               <p className="font-quote italic text-sm text-muted-foreground mt-2">
-                Тем еще нет — впишите первую через «Вписать тему»
+                {myRole === 'deputy'
+                  ? 'Тем еще нет — темы вносят наставники в разделе «Мои темы»'
+                  : 'Тем еще нет — впишите первую через «Вписать тему»'}
               </p>
             </div>
           </div>

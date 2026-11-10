@@ -50,9 +50,13 @@ export async function createTopic(data: {
     return { success: false, error: 'Тема с таким названием уже есть в каталоге этого цикла' }
   }
 
-  // наставник может создавать только СЕБЕ; замзав — любому
+  // наставник создаёт только СЕБЕ; замзав темы вручную не вносит —
+  // он управляет подачами («Подать студента») и правит формулировки
   if (role === 'supervisor' && data.supervisor_id !== userId) {
     return { success: false, error: 'Наставник вносит темы только себе' }
+  }
+  if (role === 'deputy') {
+    return { success: false, error: 'Темы вносит наставник в своём разделе «Мои темы»' }
   }
 
   const { error } = await supabase.from('topics').insert({
@@ -201,6 +205,9 @@ export async function importTopicsFromCsv(
   // наставник импортирует только себе
   if (role === 'supervisor' && supervisorId !== userId) {
     return { success: 0, errors: ['Наставник импортирует темы только себе'] }
+  }
+  if (role === 'deputy') {
+    return { success: 0, errors: ['Импорт тем — функция наставника (раздел «Мои темы»)'] }
   }
 
   for (const row of csvData) {
