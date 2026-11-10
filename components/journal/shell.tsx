@@ -54,6 +54,7 @@ export default async function JournalShell({
     ...(role === 'supervisor'
       ? [
           { href: '/supervisor/topics', label: 'Мои темы' },
+          { href: '/supervisor/bibliography', label: 'Литература' },
         ]
       : []),
 
@@ -66,6 +67,7 @@ export default async function JournalShell({
     ...(role === 'student'
       ? [
           { href: '/student/topics', label: 'Выборъ темы' },
+          { href: '/student/bibliography', label: 'Литература' },
           { href: '/student/my-work', label: 'Моя работа' },
         ]
       : []),
