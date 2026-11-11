@@ -1,12 +1,14 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { gostArticle, gostBook, gostWeb } from '@/lib/gost'
 
 /* ── Рефчекер (Task_RefResolve из схемы процесса) ──
    Вход: строка с DOI, ISBN или URL.
    Метаданные: DOI → Crossref; ISBN → Google Books (запас — OpenLibrary);
    URL → разбор страницы (мета-теги citation_*, og:*).
    Выход: готовые поля формы + строка описания по ГОСТ Р 7.0.5-2008.
+   Сборка строки — общий сборщик lib/gost.ts (он же рендерит список).
    Строка вставляется и в Word, и в Typst — формат работы не важен. */
 
 type ResolvedSource = {
@@ -54,59 +56,6 @@ function joinAuthors(list: string[]): string {
   if (clean.length === 0) return ''
   if (clean.length <= 3) return clean.join(', ')
   return `${clean.slice(0, 3).join(', ')} [и др.]`
-}
-
-function accessDate(): string {
-  const n = new Date()
-  return `${String(n.getDate()).padStart(2, '0')}.${String(n.getMonth() + 1).padStart(2, '0')}.${n.getFullYear()}`
-}
-
-/* ГОСТ Р 7.0.5-2008: статья из журнала */
-function gostArticle(m: {
-  authors: string
-  title: string
-  journal: string
-  year: string
-  volume: string
-  issue: string
-  pages: string
-  doi: string
-  url: string
-}): string {
-  let s = m.authors ? `${m.authors} ` : ''
-  s += m.title || 'Безъ названія'
-  if (m.journal) s += ` // ${m.journal}`
-  if (m.year) s += `. ${m.year}`
-  const vi = [m.volume ? `Т. ${m.volume}` : '', m.issue ? `№ ${m.issue}` : ''].filter(Boolean).join(', ')
-  if (vi) s += `. ${vi}`
-  if (m.pages) s += `. С. ${m.pages}`
-  if (m.doi) s += `. DOI ${m.doi}`
-  else if (m.url) s += `. URL: ${m.url} (дата обращения: ${accessDate()})`
-  return s + '.'
-}
-
-/* ГОСТ Р 7.0.5-2008: книга */
-function gostBook(m: {
-  authors: string
-  title: string
-  publisher: string
-  year: string
-  pages: string
-}): string {
-  let s = m.authors ? `${m.authors} ` : ''
-  s += m.title || 'Безъ названія'
-  if (m.publisher) s += `. ${m.publisher}`
-  if (m.year) s += `, ${m.year}`
-  if (m.pages) s += `. ${m.pages} с.`
-  return s + '.'
-}
-
-/* ГОСТ Р 7.0.5-2008: электронный ресурс */
-function gostWeb(m: { title: string; site: string; url: string }): string {
-  let s = `${m.title || 'Безъ названія'} [Электронный ресурс]`
-  if (m.site) s += ` // ${m.site}`
-  s += `. URL: ${m.url} (дата обращения: ${accessDate()}).`
-  return s
 }
 
 /* ── DOI → Crossref ── */

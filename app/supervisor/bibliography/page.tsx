@@ -5,6 +5,7 @@ import NoticeToast from '@/components/notice-toast'
 import { useState, useEffect, useMemo } from 'react'
 import { Loader2, CheckCircle2, AlertCircle, BookMarked, RotateCcw, ChevronDown } from 'lucide-react'
 import { reviewBibItem, cancelReworkItem, approveAllBibItems } from './actions'
+import { buildGostLine } from '@/lib/gost'
 
 type MyAppRow = {
   id: string
@@ -382,18 +383,14 @@ export default function SupervisorBibliographyPage() {
                       <div className="divide-y divide-border/60">
                         {list.map((it) => {
                           const st = ITEM_STATUS[it.status] ?? { label: it.status, tone: 'wait' as const }
+                          const gost = buildGostLine({ kind: it.kind, authors: it.authors, title: it.title, source: it.source, year: it.year, url: it.url })
                           return (
                             <div key={it.id} className="py-3.5 flex items-start gap-3">
                               <span className="font-display text-sm text-[#B08D46] w-6 shrink-0 text-right pt-0.5">
                                 {it.position}.
                               </span>
                               <div className="min-w-0 flex-1">
-                                <p className="font-quote text-sm leading-snug">
-                                  {it.authors && <span className="font-bold">{it.authors} </span>}
-                                  {it.title}
-                                  {it.source && <span className="text-muted-foreground"> — {it.source}</span>}
-                                  {it.year && <span className="text-muted-foreground">, {it.year}</span>}
-                                </p>
+                                <p className="font-quote text-sm leading-snug">{gost}</p>
                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                                   <span className="text-xs text-muted-foreground font-quote italic">
                                     {KIND_LABELS[it.kind] ?? it.kind}

@@ -3,10 +3,11 @@
 import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Papa from 'papaparse'
-import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X, Search, ChevronDown } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X, Search, ChevronDown, Copy, Check } from 'lucide-react'
 import { addBibItem, updateBibItem, deleteBibItem, importBibItems } from './actions'
 import { resolveSourceRef } from './resolve'
 import NoticeToast from '@/components/notice-toast'
+import { buildGostLine } from '@/lib/gost'
 
 type BibItem = {
   id: string
@@ -147,6 +148,19 @@ export default function StudentBibliographyPage() {
   const [refQuery, setRefQuery] = useState('')
   const [refBusy, setRefBusy] = useState(false)
   const [refGost, setRefGost] = useState<string | null>(null)
+
+  // копирование ГОСТ-строки источника въ буферъ
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  function copyGost(e: React.MouseEvent, id: string, line: string) {
+    e.stopPropagation()
+    navigator.clipboard
+      ?.writeText(line)
+      .then(() => {
+        setCopiedId(id)
+        setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 2000)
+      })
+      .catch(() => setNotice({ type: 'err', text: 'Не удалось скопировать — выделите строку вручную' }))
+  }
 
   useEffect(() => {
     loadAll()
@@ -872,6 +886,7 @@ export default function StudentBibliographyPage() {
                 <div className="space-y-0">
                   {items.map((it, i) => {
                     const st = ITEM_STATUS[it.status] ?? { label: it.status, tone: 'wait' as const }
+                    const gost = buildGostLine({ kind: it.kind, authors: it.authors, title: it.title, source: it.source, year: it.year, url: it.url })
                     return (
                       <div
                         key={it.id}
@@ -882,12 +897,7 @@ export default function StudentBibliographyPage() {
                           {i + 1}.
                         </span>
                         <div className="min-w-0 flex-1">
-                          <p className="font-quote text-[15px] leading-snug">
-                            {it.authors && <span className="font-bold">{it.authors} </span>}
-                            {it.title}
-                            {it.source && <span className="text-muted-foreground"> — {it.source}</span>}
-                            {it.year && <span className="text-muted-foreground">, {it.year}</span>}
-                          </p>
+                          <p className="font-quote text-[15px] leading-snug">{gost}</p>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
                             <span className="text-xs text-muted-foreground font-quote italic">
                               {KIND_LABELS[it.kind] ?? it.kind}
@@ -902,6 +912,23 @@ export default function StudentBibliographyPage() {
                                 ссылка
                               </a>
                             )}
+                            <button
+                              onClick={(e) => copyGost(e, it.id, gost)}
+                              title="Скопировать строку по ГОСТ Р 7.0.5-2008"
+                              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-[#8A6B2F] transition-colors"
+                            >
+                              {copiedId === it.id ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-[#6E8A2F]" />
+                                  <span className="text-[#6E8A2F]">скопировано</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  <span>по ГОСТ</span>
+                                </>
+                              )}
+                            </button>
                           </div>
                           {it.status === 'rework' && it.comment && (
                             <div className="mt-3 inline-block border border-[#8C2F1B]/50 bg-[#8C2F1B]/5 px-3 py-1.5 -rotate-1">
