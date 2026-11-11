@@ -970,7 +970,7 @@ export default function StudentBibliographyPage() {
                         </p>
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-quote text-xs text-muted-foreground">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 font-quote text-xs text-muted-foreground">
                       <span>
                         всего:{' '}
                         <b className={compliance.total >= 30 ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]'}>{compliance.total}/30</b>
@@ -987,19 +987,19 @@ export default function StudentBibliographyPage() {
                       <button
                         onClick={() => setAllCited(true)}
                         disabled={busyCitedAll || items.length === 0 || compliance.cited === compliance.total}
-                        className="inline-flex items-center gap-1.5 h-7 px-3 font-display text-[10px] uppercase tracking-[0.18em] border border-[#6E2415]/30 bg-[#8A6B2F] text-[#F3EDDF] shadow-sm transition-all duration-200 hover:bg-[#755A26] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                        className="inline-flex items-center gap-1 border border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F] px-2 py-0.5 hover:bg-[#B08D46]/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                         title="Отметить «въ текстѣ» у всѣх источников сразу"
                       >
-                        {busyCitedAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckSquare className="w-3.5 h-3.5" />}
+                        {busyCitedAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckSquare className="w-3 h-3" />}
                         всѣ въ текстѣ
                       </button>
                       <button
                         onClick={() => setAllCited(false)}
                         disabled={busyCitedAll || items.length === 0 || compliance.cited === 0}
-                        className="inline-flex items-center gap-1.5 h-7 px-3 font-display text-[10px] uppercase tracking-[0.18em] border border-input bg-card text-foreground transition-all duration-200 hover:border-[#8C2F1B] hover:text-[#8C2F1B] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                        className="inline-flex items-center gap-1 border border-border text-muted-foreground px-2 py-0.5 hover:text-[#8A6B2F] hover:border-[#B08D46]/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                         title="Снять отметки «въ текстѣ» со всѣх источников"
                       >
-                        <Square className="w-3.5 h-3.5" />
+                        <Square className="w-3 h-3" />
                         снять всѣ
                       </button>
                     </div>
