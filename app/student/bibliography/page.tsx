@@ -150,10 +150,9 @@ export default function StudentBibliographyPage() {
   // 3д+: массовая отметка «в текстѣ»
   const [busyCitedAll, setBusyCitedAll] = useState(false)
 
-  // 3д+: массовое удаление непринятых (двойное нажатіе вместо диалога)
+  // 3д+: массовое удаление непринятых (подтверждение — въ модальномъ окнѣ)
   const [busyDeleteAll, setBusyDeleteAll] = useState(false)
-  const [armDeleteAll, setArmDeleteAll] = useState(false)
-  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showDeleteAll, setShowDeleteAll] = useState(false)
 
   // рефчекер: автозаполнение по DOI / ISBN / ссылке
   const [refQuery, setRefQuery] = useState('')
@@ -186,6 +185,16 @@ export default function StudentBibliographyPage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [editingId])
+
+  /* Esc закрывает подтверждение удаления */
+  useEffect(() => {
+    if (!showDeleteAll) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowDeleteAll(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showDeleteAll])
 
   /* Тост теперь внутри NoticeToast — таймер там же */
 
@@ -492,22 +501,23 @@ export default function StudentBibliographyPage() {
     setBusyCitedAll(false)
   }
 
-  /* 3д+: удалить всѣ непринятые источники — первое нажатіе взводит кнопку на 5 секундъ,
-     второе подтверждаетъ; принятые наставникомъ (approved) не трогаются вовсе */
-  const removeAllItems = async () => {
-    if (busyDeleteAll || items.length === 0) return
-    if (!armDeleteAll) {
-      setArmDeleteAll(true)
-      if (armTimer.current) clearTimeout(armTimer.current)
-      armTimer.current = setTimeout(() => setArmDeleteAll(false), 5000)
-      return
-    }
-    if (armTimer.current) clearTimeout(armTimer.current)
-    setArmDeleteAll(false)
+  /* 3д+: удалить всѣ непринятые источники — подтверждение въ модальномъ окнѣ;
+     принятые наставникомъ (approved) не трогаются вовсе */
+  const deletableCount = items.filter((i) => i.status !== 'approved').length
+  const approvedCount = items.length - deletableCount
+
+  const openDeleteAll = () => {
+    if (busyDeleteAll || items.length === 0 || items.every((i) => i.status === 'approved')) return
+    setShowDeleteAll(true)
+  }
+
+  const confirmDeleteAll = async () => {
+    if (busyDeleteAll) return
     setBusyDeleteAll(true)
     setNotice(null)
     const res = await deleteAllBibItems()
     setBusyDeleteAll(false)
+    setShowDeleteAll(false)
     if (!res.success) {
       setNotice({ type: 'err', text: res.error || 'Ошибка удаления' })
       return
@@ -985,23 +995,19 @@ export default function StudentBibliographyPage() {
                     Вашъ списокъ литературы
                   </p>
                   <button
-                    onClick={removeAllItems}
+                    onClick={openDeleteAll}
                     disabled={busyDeleteAll || items.length === 0 || items.every((i) => i.status === 'approved')}
                     title={
                       items.length === 0
                         ? 'Списокъ пустъ'
                         : items.every((i) => i.status === 'approved')
                           ? 'Всѣ источники приняты наставникомъ — удаление закрыто'
-                          : 'Удалить всѣ непринятые источники (нажмите дважды)'
+                          : 'Удалить всѣ непринятые источники'
                     }
-                    className={`inline-flex items-center gap-1.5 h-7 px-2.5 font-display text-[10px] uppercase tracking-[0.18em] border transition-all duration-200 active:scale-[0.98] shrink-0 ${
-                      armDeleteAll
-                        ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF] shadow-sm'
-                        : 'bg-card border-border text-muted-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B]'
-                    } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-muted-foreground`}
+                    className="inline-flex items-center gap-1.5 h-7 px-2.5 font-display text-[10px] uppercase tracking-[0.18em] border bg-card border-border text-muted-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B] transition-all duration-200 active:scale-[0.98] shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {busyDeleteAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                    {armDeleteAll ? 'точно удалить всѣ?' : 'удалить всѣ'}
+                    удалить всѣ
                   </button>
                 </div>
 
@@ -1241,6 +1247,67 @@ export default function StudentBibliographyPage() {
                   className="border border-[#6E2415] bg-[#8C2F1B] text-[#F3EDDF] font-display text-[10px] uppercase tracking-[0.18em] px-5 py-2.5 transition-all duration-200 hover:bg-[#7A2715] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#8C2F1B]"
                 >
                   {busy ? 'Записывается...' : 'Сохранить правку'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Модальное подтверждение «удалить всѣ» ── */}
+      {showDeleteAll && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#2B2118]/50 animate-fade-in"
+          onClick={() => setShowDeleteAll(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full max-w-md border border-[#B08D46]/60 bg-card p-1.5 shadow-[0_1px_2px_rgba(43,33,24,0.06),0_30px_70px_-20px_rgba(43,33,24,0.5)] animate-fade-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Corners />
+            <div className="border border-border px-6 py-5">
+              <div className="flex items-center justify-between pb-3 border-b border-border mb-4">
+                <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                  Подтверждение
+                </p>
+                <button
+                  onClick={() => setShowDeleteAll(false)}
+                  title="Закрыть"
+                  className="p-1.5 border border-border text-muted-foreground hover:text-[#8C2F1B] hover:border-[#8C2F1B]/50 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <p className="font-quote text-sm text-foreground leading-relaxed">
+                Будутъ удалены только <b className="text-[#8C2F1B]">непринятые</b> источники —{' '}
+                <b>{deletableCount}</b> изъ {items.length}.
+              </p>
+              <p className="font-quote text-sm text-muted-foreground mt-2">
+                {approvedCount > 0
+                  ? `Принятые наставникомъ (${approvedCount}) останутся въ спискѣ.`
+                  : 'Принятыхъ наставникомъ источниковъ въ спискѣ нѣтъ.'}
+              </p>
+              <p className="font-quote italic text-xs text-[#8C2F1B]/80 mt-3">
+                Вниманіе: дѣйствіе нельзя будеть отменить.
+              </p>
+
+              <div className="flex items-center justify-end gap-4 mt-5">
+                <button
+                  onClick={() => setShowDeleteAll(false)}
+                  className="text-xs font-quote italic text-muted-foreground hover:text-[#8C2F1B] transition-colors"
+                >
+                  отмѣнить
+                </button>
+                <button
+                  onClick={confirmDeleteAll}
+                  disabled={busyDeleteAll || deletableCount === 0}
+                  className="inline-flex items-center gap-1.5 border border-[#6E2415] bg-[#8C2F1B] text-[#F3EDDF] font-display text-[10px] uppercase tracking-[0.18em] px-5 py-2 transition-all duration-200 hover:bg-[#7A2715] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {busyDeleteAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  удалить {deletableCount}
                 </button>
               </div>
             </div>
