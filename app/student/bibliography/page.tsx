@@ -3,8 +3,9 @@
 import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Papa from 'papaparse'
-import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X, Search } from 'lucide-react'
 import { addBibItem, updateBibItem, deleteBibItem, importBibItems } from './actions'
+import { resolveSourceRef } from './resolve'
 
 type BibItem = {
   id: string
@@ -141,6 +142,11 @@ export default function StudentBibliographyPage() {
   const [importing, setImporting] = useState(false)
   const [importResults, setImportResults] = useState<{ success: number; errors: string[] } | null>(null)
 
+  // рефчекер: автозаполнение по DOI / ISBN / ссылке
+  const [refQuery, setRefQuery] = useState('')
+  const [refBusy, setRefBusy] = useState(false)
+  const [refGost, setRefGost] = useState<string | null>(null)
+
   useEffect(() => {
     loadAll()
   }, [])
@@ -186,6 +192,35 @@ export default function StudentBibliographyPage() {
         setImporting(false)
       },
     })
+  }
+
+    /* ── Рефчекер: тянем метаданные по DOI / ISBN / ссылке ── */
+  const handleResolve = async () => {
+    if (!refQuery.trim() || refBusy) return
+    if (!windowOpen) {
+      setNotice({ type: 'err', text: 'Окно «Литература» закрыто — ведение списка недоступно' })
+      return
+    }
+    setRefBusy(true)
+    setNotice(null)
+    setRefGost(null)
+    const result = await resolveSourceRef(refQuery)
+    setRefBusy(false)
+    if (!result.success) {
+      setNotice({ type: 'err', text: result.error || 'Источник не найден' })
+      return
+    }
+    setForm({
+      kind: result.kind,
+      authors: result.authors,
+      title: result.title,
+      source: result.source,
+      year: result.year,
+      url: result.url,
+    })
+    setFormErrors({})
+    setRefGost(result.gost)
+    setNotice({ type: 'ok', text: `Найдено (${result.provider}) — поля заполнены, проверьте и сохраняйте` })
   }
 
   const loadAll = async () => {
@@ -668,6 +703,48 @@ export default function StudentBibliographyPage() {
                     <FileDown className="w-3.5 h-3.5" />
                     Импортъ CSV
                   </button>
+                </div>
+
+                                {/* ── Рефчекер: автозаполнение по DOI / ISBN / ссылке ── */}
+                <div className="mb-4 bg-[#FAF5E8] border border-border p-4">
+                  <p className="text-xs font-quote italic text-muted-foreground mb-2">
+                    Рефчекеръ: вставьте DOI, ISBN или ссылку — поля заполнятся сами
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={refQuery}
+                      onChange={(e) => setRefQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleResolve()
+                        }
+                      }}
+                      maxLength={500}
+                      placeholder="10.1234/xyz · 978-5-… · https://…"
+                      disabled={refBusy || busy || !windowOpen}
+                      className="flex-1 h-9 bg-card border border-input px-3 text-sm outline-none transition-all duration-200 focus:border-[#8C2F1B] focus:ring-3 focus:ring-[#8C2F1B]/10 placeholder:text-muted-foreground/50 disabled:opacity-50"
+                    />
+                    <button
+                      onClick={handleResolve}
+                      disabled={refBusy || busy || !windowOpen || !refQuery.trim()}
+                      title={!windowOpen ? 'Окно закрыто' : 'Найти метаданные и заполнить поля'}
+                      className="inline-flex items-center justify-center gap-1.5 h-9 px-4 font-display text-[10px] uppercase tracking-[0.18em] border border-[#B08D46]/60 bg-card text-foreground transition-all duration-200 hover:border-[#8C2F1B] hover:text-[#8C2F1B] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                    >
+                      {refBusy ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Search className="w-3.5 h-3.5" />
+                      )}
+                      {refBusy ? 'Ищется...' : 'Найти'}
+                    </button>
+                  </div>
+                  {refGost && (
+                    <p className="mt-3 text-sm font-quote italic text-[#6E5A2A] border-l-2 border-[#B08D46] pl-3 break-words">
+                      По ГОСТ Р 7.0.5-2008: {refGost}
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{renderFields()}</div>
