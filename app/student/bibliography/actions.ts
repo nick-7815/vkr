@@ -310,6 +310,47 @@ export async function deleteBibItem(itemId: string) {
   return { success: true }
 }
 
+/* ── Шаг 3д+: удалить всѣ непринятые источники разом ──
+   Правило то же, что у одиночного удаления: approved (принятые наставникомъ)
+   не трогаются вовсе. Явный фильтр student_id + RLS. */
+export async function deleteAllBibItems() {
+  const userId = await requireStudent()
+  const supabase = await createClient()
+
+  const { data: rows, error: selError } = await supabase
+    .from('bibliography_items')
+    .select('id, status')
+    .eq('student_id', userId)
+
+  if (selError) {
+    return { success: false, error: selError.message }
+  }
+
+  const deletable = (rows ?? []).filter((r) => r.status !== 'approved')
+  const skipped = (rows?.length ?? 0) - deletable.length
+
+  if (deletable.length === 0) {
+    return {
+      success: false,
+      error:
+        skipped > 0
+          ? `Удалять нечего — всѣ ${skipped} источниковъ уже приняты наставникомъ`
+          : 'Списокъ пустъ — удалять нечего',
+    }
+  }
+
+  const { error } = await supabase
+    .from('bibliography_items')
+    .delete()
+    .in('id', deletable.map((r) => r.id))
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  return { success: true, count: deletable.length, skipped }
+}
+
 /* ── Импорт списка из ведомости CSV ──
    Валидация каждого ряда — та же validateFields, что и в ручной форме;
    дубли — по названию (без учёта регистра) против своего списка и внутри файла;

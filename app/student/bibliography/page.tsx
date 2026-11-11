@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Papa from 'papaparse'
 import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X, Search, ChevronDown, Copy, Check, Quote, Square, CheckSquare } from 'lucide-react'
-import { addBibItem, updateBibItem, deleteBibItem, importBibItems, toggleBibCited, setAllBibCited } from './actions'
+import { addBibItem, updateBibItem, deleteBibItem, importBibItems, toggleBibCited, setAllBibCited, deleteAllBibItems } from './actions'
 import { resolveSourceRef } from './resolve'
 import NoticeToast from '@/components/notice-toast'
 import { buildGostLine } from '@/lib/gost'
@@ -149,6 +149,11 @@ export default function StudentBibliographyPage() {
 
   // 3д+: массовая отметка «в текстѣ»
   const [busyCitedAll, setBusyCitedAll] = useState(false)
+
+  // 3д+: массовое удаление непринятых (двойное нажатіе вместо диалога)
+  const [busyDeleteAll, setBusyDeleteAll] = useState(false)
+  const [armDeleteAll, setArmDeleteAll] = useState(false)
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // рефчекер: автозаполнение по DOI / ISBN / ссылке
   const [refQuery, setRefQuery] = useState('')
@@ -487,6 +492,34 @@ export default function StudentBibliographyPage() {
     setBusyCitedAll(false)
   }
 
+  /* 3д+: удалить всѣ непринятые источники — первое нажатіе взводит кнопку на 5 секундъ,
+     второе подтверждаетъ; принятые наставникомъ (approved) не трогаются вовсе */
+  const removeAllItems = async () => {
+    if (busyDeleteAll || items.length === 0) return
+    if (!armDeleteAll) {
+      setArmDeleteAll(true)
+      if (armTimer.current) clearTimeout(armTimer.current)
+      armTimer.current = setTimeout(() => setArmDeleteAll(false), 5000)
+      return
+    }
+    if (armTimer.current) clearTimeout(armTimer.current)
+    setArmDeleteAll(false)
+    setBusyDeleteAll(true)
+    setNotice(null)
+    const res = await deleteAllBibItems()
+    setBusyDeleteAll(false)
+    if (!res.success) {
+      setNotice({ type: 'err', text: res.error || 'Ошибка удаления' })
+      return
+    }
+    setNotice({
+      type: 'ok',
+      text: `Удалено источниковъ: ${res.count}${res.skipped ? ` · принятые наставникомъ не тронуты: ${res.skipped}` : ''}`,
+    })
+    if (editingId) resetForm()
+    loadAll()
+  }
+
   const listAllowed = myApp && myApp.status !== 'submitted' && myApp.status !== 'in_order'
 
   const inputCls = (field: keyof BibForm) =>
@@ -736,6 +769,25 @@ export default function StudentBibliographyPage() {
                   <p className="font-display text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                     источниковъ: {items.length} · принято: {items.filter((i) => i.status === 'approved').length}
                   </p>
+                  <button
+                    onClick={removeAllItems}
+                    disabled={busyDeleteAll || items.length === 0 || items.every((i) => i.status === 'approved')}
+                    title={
+                      items.length === 0
+                        ? 'Списокъ пустъ'
+                        : items.every((i) => i.status === 'approved')
+                          ? 'Всѣ источники приняты наставникомъ — удаление закрыто'
+                          : 'Удалить всѣ непринятые источники (нажмите дважды)'
+                    }
+                    className={`inline-flex items-center gap-1.5 h-7 px-2.5 font-display text-[10px] uppercase tracking-[0.18em] border transition-all duration-200 active:scale-[0.98] ${
+                      armDeleteAll
+                        ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF] shadow-sm'
+                        : 'bg-card border-border text-muted-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B]'
+                    } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-muted-foreground`}
+                  >
+                    {busyDeleteAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    {armDeleteAll ? 'точно удалить всѣ?' : 'удалить всѣ'}
+                  </button>
                 </div>
               </div>
             </div>
