@@ -18,12 +18,13 @@ export const ORIGIN_LABELS: Record<string, string> = {
   other: 'Прочее',
 }
 
-/* Базы, присутствіе которыхъ въ спискѣ обязательно */
-export const REQUIRED_ORIGINS: Array<{ key: 'vstu' | 'elibrary' | 'scopus' | 'web'; label: string }> = [
-  { key: 'vstu', label: 'Б-ка ВолгГТУ' },
-  { key: 'elibrary', label: 'eLIBRARY.RU' },
-  { key: 'scopus', label: 'Scopus' },
-  { key: 'web', label: 'Интернетъ-источники' },
+/* Базы, присутствіе которыхъ въ спискѣ обязательно.
+   hint — что студенту сделать, если базы нетъ (шаг 3д: понятные предупрежденія). */
+export const REQUIRED_ORIGINS: Array<{ key: 'vstu' | 'elibrary' | 'scopus' | 'web'; label: string; hint: string }> = [
+  { key: 'vstu', label: 'Б-ка ВолгГТУ', hint: 'добавь источникъ съ ссылкой на vstu.ru или выбери эту базу вручную въ формѣ' },
+  { key: 'elibrary', label: 'eLIBRARY.RU', hint: 'добавь статью съ ссылкой на elibrary.ru или выбери эту базу вручную въ формѣ' },
+  { key: 'scopus', label: 'Scopus', hint: 'добавь англоязычную статью съ ссылкой на scopus.com или выбери эту базу вручную въ формѣ' },
+  { key: 'web', label: 'Интернетъ-источники', hint: 'добавь источникъ вида «интернетъ-ресурсъ» — онъ попадаетъ въ интернетъ-источники самъ' },
 ]
 
 /* Зарубежный источник: латиница въ авторахъ/названіи и ни буквы кириллицы.
@@ -60,18 +61,19 @@ export function computeCompliance(items: ComplianceItem[]): Compliance {
   }
   const cited = items.filter((i) => i.cited).length
 
+  /* предупрежденія — сразу съ действіемъ: не «чего нетъ», а «что сделать» */
   const missing: string[] = []
   if (total < GOST_TARGETS.minItems) {
-    missing.push(`источниковъ ${total} изъ ${GOST_TARGETS.minItems}`)
+    missing.push(`источниковъ въ спискѣ ${total} изъ ${GOST_TARGETS.minItems} — добавь ещё ${GOST_TARGETS.minItems - total}`)
   }
   if (total > 0 && foreign / total < GOST_TARGETS.minForeignShare) {
-    missing.push(`зарубежныхъ ${Math.round((foreign / total) * 100)}% изъ 20%`)
+    missing.push(`зарубежныхъ только ${Math.round((foreign / total) * 100)}% (${foreign} изъ ${total}) — нужно не менее 20%, добавь источниковъ на английскомъ`)
   }
   for (const r of REQUIRED_ORIGINS) {
-    if (!byOrigin[r.key]) missing.push(`база «${r.label}»`)
+    if (!byOrigin[r.key]) missing.push(`нетъ ни одного источника изъ «${r.label}» — ${r.hint}`)
   }
   if (total > 0 && cited < total) {
-    missing.push(`ссылка въ текстѣ не отмечена у ${total - cited} изъ ${total}`)
+    missing.push(`у ${total - cited} изъ ${total} не отмечено «въ текстѣ» — ставь галочку, когда вставишь ссылку [N] въ текстъ главы`)
   }
 
   return {

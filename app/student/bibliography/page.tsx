@@ -1065,9 +1065,14 @@ export default function StudentBibliographyPage() {
                     </div>
                   </div>
                   {compliance.missing.length > 0 && (
-                    <p className="font-quote italic text-xs text-[#8C2F1B]/90 mt-2">
-                      Не дотягиваетъ: {compliance.missing.join('; ')}
-                    </p>
+                    <div className="mt-2 space-y-1">
+                      {compliance.missing.map((m) => (
+                        <p key={m} className="font-quote italic text-xs text-[#8C2F1B]/90 flex gap-1.5">
+                          <span className="shrink-0 text-[#8C2F1B]/60">—</span>
+                          <span>{m}</span>
+                        </p>
+                      ))}
+                    </div>
                   )}
                   <div className="flex flex-wrap gap-1.5 mt-2.5">
                     {REQUIRED_ORIGINS.map((r) => {
@@ -1075,6 +1080,11 @@ export default function StudentBibliographyPage() {
                       return (
                         <span
                           key={r.key}
+                          title={
+                            has
+                              ? `${r.label}: источниковъ — ${compliance.byOrigin[r.key]}`
+                              : `Нетъ источниковъ изъ «${r.label}» — ${r.hint}`
+                          }
                           className={`inline-flex items-center gap-1 text-xs border px-2 py-0.5 font-quote ${
                             has
                               ? 'border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F]'
