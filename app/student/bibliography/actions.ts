@@ -6,6 +6,9 @@ type Db = Awaited<ReturnType<typeof createClient>>
 
 const KINDS = ['book', 'article', 'url', 'standard', 'other'] as const
 
+/* Шаг 3д: база происхождения источника (обязательные базы методички) */
+const ORIGINS = ['vstu', 'elibrary', 'scopus', 'web', 'other'] as const
+
 async function requireStudent() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -51,6 +54,7 @@ type BibFields = {
   source?: string
   year?: string
   url?: string
+  origin?: string
 }
 
 /* Общая валидация полей источника */
@@ -76,7 +80,32 @@ function validateFields(data: BibFields): string | null {
   if (data.url && data.url.trim() && !/^https?:\/\/\S+$/i.test(data.url.trim())) {
     return 'Ссылка должна начинаться с http:// или https://'
   }
+  /* серверное зеркало клиентского правила: статья без журнала не принимается */
+  if (data.kind === 'article' && !data.source?.trim()) {
+    return 'Для статьи укажите журнал / издание'
+  }
+  if (data.origin && data.origin.trim() && !ORIGINS.includes(data.origin as (typeof ORIGINS)[number])) {
+    return 'Неизвестная база источника'
+  }
   return null
+}
+
+/* Шаг 3д: автоопределение базы по URL/изданию — в форме можно переопределить */
+function guessOrigin(url?: string, source?: string, kind?: string): string | null {
+  const hay = `${(url ?? '').toLowerCase()} ${(source ?? '').toLowerCase()}`
+  if (/elibrary/.test(hay)) return 'elibrary'
+  if (/scopus/.test(hay)) return 'scopus'
+  if (/vstu\.ru|волггту/.test(hay)) return 'vstu'
+  if (kind === 'url') return 'web'
+  return null
+}
+
+/* указанная пользователем база сильнее автоопределения */
+function normalizeOrigin(data: BibFields): string | null {
+  if (data.origin && ORIGINS.includes(data.origin as (typeof ORIGINS)[number])) {
+    return data.origin
+  }
+  return guessOrigin(data.url, data.source, data.kind)
 }
 
 function fieldsToRow(data: BibFields) {
@@ -87,6 +116,7 @@ function fieldsToRow(data: BibFields) {
     source: data.source?.trim() || null,
     year: data.year && data.year.trim() ? Number(data.year.trim()) : null,
     url: data.url?.trim() || null,
+    origin: normalizeOrigin(data),
     updated_at: new Date().toISOString(),
   }
 }
@@ -151,6 +181,36 @@ export async function addBibItem(data: BibFields) {
     status: 'pending',
     ...fieldsToRow(data),
   })
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  return { success: true }
+}
+
+/* ── Шаг 3д: отметить/снять «есть ссылка в тексте» ──
+   Текст ВКР ведётся вне трекера, отметка — самоподтверждение студента.
+   Доступно на любом статусе источника (в т.ч. принятом наставником). */
+export async function toggleBibCited(itemId: string, cited: boolean) {
+  await requireStudent()
+  const supabase = await createClient()
+
+  const { data: item } = await supabase
+    .from('bibliography_items')
+    .select('id')
+    .eq('id', itemId)
+    .limit(1)
+    .maybeSingle()
+
+  if (!item) {
+    return { success: false, error: 'Источник не найден' }
+  }
+
+  const { error } = await supabase
+    .from('bibliography_items')
+    .update({ cited: Boolean(cited), updated_at: new Date().toISOString() })
+    .eq('id', itemId)
 
   if (error) {
     return { success: false, error: error.message }
@@ -242,6 +302,15 @@ const KIND_ALIASES: Record<string, string> = {
   other: 'other', 'прочее': 'other',
 }
 
+/* Шаг 3д: база источника въ CSV (колонка origin, не обязательна) */
+const ORIGIN_ALIASES: Record<string, string> = {
+  vstu: 'vstu', 'волггту': 'vstu', 'библиотека волггту': 'vstu', 'б-ка волггту': 'vstu',
+  elibrary: 'elibrary', 'elibrary.ru': 'elibrary', 'ринц': 'elibrary',
+  scopus: 'scopus',
+  web: 'web', 'интернет': 'web', 'интернетъ': 'web', 'интернет-источник': 'web', 'интернетъ-источникъ': 'web', 'internet': 'web', 'сайт': 'web',
+  other: 'other', 'прочее': 'other',
+}
+
 const MAX_IMPORT_ROWS = 150
 
 export async function importBibItems(rows: Array<Record<string, string>>) {
@@ -321,6 +390,7 @@ export async function importBibItems(rows: Array<Record<string, string>>) {
 
       // kind: англ/рус синонимы; пусто или незнакомое — «книга»
       const kind = KIND_ALIASES[(row.kind ?? '').trim().toLowerCase()] ?? 'book'
+      const originAlias = ORIGIN_ALIASES[(row.origin ?? '').trim().toLowerCase()]
       const data: BibFields = {
         kind,
         authors: row.authors ?? '',
@@ -328,6 +398,7 @@ export async function importBibItems(rows: Array<Record<string, string>>) {
         source: row.source ?? '',
         year: row.year ?? '',
         url: row.url ?? '',
+        origin: originAlias,
       }
 
       const invalid = validateFields(data)

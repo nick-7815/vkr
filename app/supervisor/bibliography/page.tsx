@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Loader2, CheckCircle2, AlertCircle, BookMarked, RotateCcw, ChevronDown } from 'lucide-react'
 import { reviewBibItem, cancelReworkItem, approveAllBibItems } from './actions'
 import { buildGostLine } from '@/lib/gost'
+import { computeCompliance, REQUIRED_ORIGINS, ORIGIN_LABELS } from '@/lib/bib-compliance'
 
 type MyAppRow = {
   id: string
@@ -25,6 +26,8 @@ type BibItem = {
   source: string | null
   year: number | null
   url: string | null
+  origin: string | null
+  cited: boolean
   status: string
   comment: string | null
 }
@@ -163,7 +166,7 @@ export default function SupervisorBibliographyPage() {
       if (myApps.length > 0) {
         const { data: bib } = await supabase
           .from('bibliography_items')
-          .select('id, application_id, position, kind, authors, title, source, year, url, status, comment')
+          .select('id, application_id, position, kind, authors, title, source, year, url, origin, cited, status, comment')
           .in('application_id', myApps.map((a) => a.id))
           .order('position', { ascending: true })
           .order('created_at', { ascending: true })
@@ -380,6 +383,36 @@ export default function SupervisorBibliographyPage() {
 
                     {/* списокъ источниковъ — плавное раскрытие */}
 <Collapse open={expanded}>
+                      {/* Шаг 3д: сводъ состава — то же вычисление, что у студента */}
+                      {(() => {
+                        const comp = computeCompliance(list)
+                        return (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-3 border-b border-border/60 mb-1 font-quote text-xs text-muted-foreground">
+                            <span className="font-display text-[9px] uppercase tracking-[0.18em] text-[#8A6B2F]">
+                              Составъ:
+                            </span>
+                            <span className={comp.total >= 30 ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]'}>
+                              {comp.total}/30
+                            </span>
+                            <span className={comp.total > 0 && comp.foreignShare >= 0.2 ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]'}>
+                              зарубежные {Math.round(comp.foreignShare * 100)}% ({comp.foreign})
+                            </span>
+                            {REQUIRED_ORIGINS.map((r) => (
+                              <span key={r.key} className={comp.byOrigin[r.key] > 0 ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]/70'}>
+                                {r.label} {comp.byOrigin[r.key] > 0 ? `· ${comp.byOrigin[r.key]}` : '· —'}
+                              </span>
+                            ))}
+                            <span className={comp.total > 0 && comp.cited === comp.total ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]/70'}>
+                              въ текстѣ {comp.cited}/{comp.total}
+                            </span>
+                            {comp.ok && (
+                              <span className="font-display text-[9px] uppercase tracking-[0.18em] text-[#8A6B2F] border border-[#B08D46]/60 bg-[#B08D46]/10 px-2 py-0.5">
+                                шлюзъ открытъ
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
                       <div className="divide-y divide-border/60">
                         {list.map((it) => {
                           const st = ITEM_STATUS[it.status] ?? { label: it.status, tone: 'wait' as const }
@@ -395,6 +428,16 @@ export default function SupervisorBibliographyPage() {
                                   <span className="text-xs text-muted-foreground font-quote italic">
                                     {KIND_LABELS[it.kind] ?? it.kind}
                                   </span>
+                                  {it.origin && (
+                                    <span className="text-xs font-quote text-[#8A6B2F]/80 border-b border-dotted border-[#B08D46]/40">
+                                      {ORIGIN_LABELS[it.origin] ?? it.origin}
+                                    </span>
+                                  )}
+                                  {it.cited && (
+                                    <span className="text-xs font-quote text-[#8A6B2F]/80">
+                                      въ текстѣ ✓
+                                    </span>
+                                  )}
                                   {it.url && (
                                     <a
                                       href={it.url}

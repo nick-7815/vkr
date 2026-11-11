@@ -3,11 +3,12 @@
 import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Papa from 'papaparse'
-import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X, Search, ChevronDown, Copy, Check } from 'lucide-react'
-import { addBibItem, updateBibItem, deleteBibItem, importBibItems } from './actions'
+import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X, Search, ChevronDown, Copy, Check, Quote, Square, CheckSquare } from 'lucide-react'
+import { addBibItem, updateBibItem, deleteBibItem, importBibItems, toggleBibCited } from './actions'
 import { resolveSourceRef } from './resolve'
 import NoticeToast from '@/components/notice-toast'
 import { buildGostLine } from '@/lib/gost'
+import { computeCompliance, REQUIRED_ORIGINS, ORIGIN_LABELS } from '@/lib/bib-compliance'
 
 type BibItem = {
   id: string
@@ -18,6 +19,8 @@ type BibItem = {
   source: string | null
   year: number | null
   url: string | null
+  origin: string | null
+  cited: boolean
   status: string
   comment: string | null
 }
@@ -43,7 +46,7 @@ const ITEM_STATUS: Record<string, { label: string; tone: 'ok' | 'wait' | 'warn' 
   rework: { label: 'Замѣчаніе', tone: 'warn' },
 }
 
-const EMPTY_FORM = { kind: 'book', authors: '', title: '', source: '', year: '', url: '' }
+const EMPTY_FORM = { kind: 'book', authors: '', title: '', source: '', year: '', url: '', origin: '' }
 
 type BibForm = typeof EMPTY_FORM
 
@@ -237,6 +240,7 @@ export default function StudentBibliographyPage() {
       source: result.source,
       year: result.year,
       url: result.url,
+      origin: '',
     })
     setFormErrors({})
     setRefGost(result.gost)
@@ -282,7 +286,7 @@ export default function StudentBibliographyPage() {
       if (a && a.status !== 'submitted' && a.status !== 'in_order') {
         const { data: rows } = await supabase
           .from('bibliography_items')
-          .select('id, position, kind, authors, title, source, year, url, status, comment')
+          .select('id, position, kind, authors, title, source, year, url, origin, cited, status, comment')
           .eq('student_id', user?.id ?? '00000000-0000-0000-0000-000000000000')
           .eq('cycle_id', c.id)
           .order('position', { ascending: true })
@@ -311,6 +315,7 @@ export default function StudentBibliographyPage() {
       source: it.source || '',
       year: it.year ? String(it.year) : '',
       url: it.url || '',
+      origin: it.origin || '',
     })
     setFormErrors({})
   }
@@ -440,6 +445,24 @@ export default function StudentBibliographyPage() {
     return { key: 'wait', label: 'Списокъ на проверкѣ', tone: 'wait' as const }
   }, [items])
 
+  /* Шаг 3д: шлюз «Списокъ соответствуетъ требованиямъ?» */
+  const compliance = useMemo(
+    () =>
+      computeCompliance(items.map((i) => ({ origin: i.origin, cited: i.cited, title: i.title, authors: i.authors }))),
+    [items]
+  )
+
+  /* отметка «есть ссылка въ текстѣ» — оптимистично, откат при ошибке */
+  const toggleCited = async (it: BibItem) => {
+    const next = !it.cited
+    setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, cited: next } : p)))
+    const res = await toggleBibCited(it.id, next)
+    if (!res.success) {
+      setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, cited: it.cited } : p)))
+      setNotice({ type: 'err', text: res.error || 'Не удалось сохранить отметку' })
+    }
+  }
+
   const listAllowed = myApp && myApp.status !== 'submitted' && myApp.status !== 'in_order'
 
   const inputCls = (field: keyof BibForm) =>
@@ -468,6 +491,24 @@ export default function StudentBibliographyPage() {
           {Object.entries(KIND_LABELS).map(([k, label]) => (
             <option key={k} value={k}>{label}</option>
           ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-quote italic text-muted-foreground mb-1.5">
+          База (обязательна для шлюза регламента)
+        </label>
+        <select
+          value={form.origin}
+          onChange={(e) => setField('origin', e.target.value)}
+          disabled={busy}
+          className={inputCls('origin')}
+        >
+          <option value="">— не указана —</option>
+          <option value="vstu">Б-ка ВолгГТУ</option>
+          <option value="elibrary">eLIBRARY.RU</option>
+          <option value="scopus">Scopus</option>
+          <option value="web">Интернетъ-источникъ</option>
+          <option value="other">Прочее</option>
         </select>
       </div>
       <div>
@@ -810,13 +851,16 @@ export default function StudentBibliographyPage() {
                       Форматъ ведомости
                     </p>
                     <code className="block font-mono text-xs text-foreground/80 leading-relaxed">
-                      kind,authors,title,source,year,url<br />
-                      book,Ивановъ И. И.,Базы данныхъ,Лань,2022,<br />
-                      article,Петровъ П. П.,Обзоръ подходовъ,Вестникъ ИТъ,2023,
+                      kind,authors,title,source,year,url,origin<br />
+                      book,Ивановъ И. И.,Базы данныхъ,Лань,2022,,vstu<br />
+                      article,Петровъ П. П.,Обзоръ подходовъ,Вестникъ ИТъ,2023,,elibrary<br />
+                      article,Smith J.,Deep learning survey,Nature,2024,,scopus
                     </code>
                     <p className="font-quote italic text-xs text-muted-foreground mt-3">
                       Первая строка — заголовокъ. Обязательна только колонка title.
                       kind: book / article / url / standard / other (пусто — книга).
+                      origin (не обязательна): vstu / elibrary / scopus / web / other —
+                      если пусто, база определяется по ссылке (для статьи нужен журналъ).
                       Годъ 1900–2100; ссылка начинается съ http:// или https://.
                       Дубли названий не принимаются.
                     </p>
@@ -883,6 +927,67 @@ export default function StudentBibliographyPage() {
                   Вашъ списокъ литературы
                 </p>
 
+                {/* ── Шаг 3д: шлюз «Списокъ соответствуетъ требованиямъ?» ── */}
+                <div className="my-3 border border-border bg-[#FAF5E8]/60 px-4 py-3.5">
+                  <div className="flex items-start justify-between gap-x-6 gap-y-2 flex-wrap">
+                    <div>
+                      <p className="font-display text-[10px] uppercase tracking-[0.25em] text-[#8A6B2F]">
+                        Шлюзъ регламента: составъ списка
+                      </p>
+                      {compliance.ok ? (
+                        <p className="font-quote text-sm text-[#8A6B2F] mt-1 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4" />
+                          Списокъ соответствуетъ требованиямъ — шлюзъ открытъ
+                        </p>
+                      ) : (
+                        <p className="font-quote text-sm text-[#8C2F1B] mt-1 flex items-center gap-1.5">
+                          <AlertCircle className="w-4 h-4" />
+                          {compliance.total === 0 ? 'Списокъ не начатъ — нужны источники' : 'Нужны ещё источники — шлюзъ закрытъ'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 font-quote text-xs text-muted-foreground">
+                      <span>
+                        всего:{' '}
+                        <b className={compliance.total >= 30 ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]'}>{compliance.total}/30</b>
+                      </span>
+                      <span>
+                        зарубежные:{' '}
+                        <b className={compliance.total > 0 && compliance.foreignShare >= 0.2 ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]'}>
+                          {Math.round(compliance.foreignShare * 100)}% ({compliance.foreign})
+                        </b>
+                      </span>
+                      <span>
+                        въ текстѣ: <b className={compliance.total > 0 && compliance.cited === compliance.total ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]'}>{compliance.cited}/{compliance.total}</b>
+                      </span>
+                    </div>
+                  </div>
+                  {compliance.missing.length > 0 && (
+                    <p className="font-quote italic text-xs text-[#8C2F1B]/90 mt-2">
+                      Не дотягиваетъ: {compliance.missing.join('; ')}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-1.5 mt-2.5">
+                    {REQUIRED_ORIGINS.map((r) => {
+                      const has = compliance.byOrigin[r.key] > 0
+                      return (
+                        <span
+                          key={r.key}
+                          className={`inline-flex items-center gap-1 text-xs border px-2 py-0.5 font-quote ${
+                            has
+                              ? 'border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F]'
+                              : 'border-border text-muted-foreground/70'
+                          }`}
+                        >
+                          {has ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                          {r.label}
+                          {has && ` · ${compliance.byOrigin[r.key]}`}
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 <div className="space-y-0">
                   {items.map((it, i) => {
                     const st = ITEM_STATUS[it.status] ?? { label: it.status, tone: 'wait' as const }
@@ -902,6 +1007,21 @@ export default function StudentBibliographyPage() {
                             <span className="text-xs text-muted-foreground font-quote italic">
                               {KIND_LABELS[it.kind] ?? it.kind}
                             </span>
+                            {it.origin && (
+                              <span className="text-xs font-quote text-[#8A6B2F]/80 border-b border-dotted border-[#B08D46]/40">
+                                {ORIGIN_LABELS[it.origin] ?? it.origin}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => toggleCited(it)}
+                              title="Есть ссылка на источникъ въ текстѣ работы? (шлюзъ регламента)"
+                              className={`inline-flex items-center gap-1 text-xs font-quote transition-colors ${
+                                it.cited ? 'text-[#8A6B2F]' : 'text-muted-foreground/60 hover:text-[#8A6B2F]'
+                              }`}
+                            >
+                              {it.cited ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                              въ текстѣ
+                            </button>
                             {it.url && (
                               <a
                                 href={it.url}
