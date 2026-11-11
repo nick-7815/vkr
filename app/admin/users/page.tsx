@@ -1,6 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
+import NoticeToast from '@/components/notice-toast'
 import { useState, useEffect, useMemo } from 'react'
 import Papa from 'papaparse'
 import {
@@ -417,27 +418,8 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* ── Баннер-уведомление (плавный) ── */}
-      <Collapse open={!!notice}>
-        {notice && (
-          <div
-            className={`flex items-start gap-2.5 border px-4 py-3 ${
-              notice.type === 'ok'
-                ? 'border-[#B08D46]/60 bg-[#B08D46]/10'
-                : 'border-l-2 border-l-[#8C2F1B] border-red-200 bg-red-50'
-            }`}
-          >
-            {notice.type === 'ok' ? (
-              <CheckCircle2 className="w-4 h-4 text-[#8A6B2F] mt-0.5 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
-            )}
-            <p className={`text-sm whitespace-pre-line ${notice.type === 'ok' ? 'text-[#6E5A2A]' : 'text-red-800'}`}>
-              {notice.text}
-            </p>
-          </div>
-        )}
-      </Collapse>
+      {/* ── Уведомление-тост (общая компонента) ── */}
+      <NoticeToast notice={notice} onClose={() => setNotice(null)} />
 
       {/* ── Ведомость № 2: вписание записи (плавная) ── */}
       <Collapse open={showForm}>

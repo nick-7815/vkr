@@ -6,6 +6,7 @@ import Papa from 'papaparse'
 import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X, Search, ChevronDown } from 'lucide-react'
 import { addBibItem, updateBibItem, deleteBibItem, importBibItems } from './actions'
 import { resolveSourceRef } from './resolve'
+import NoticeToast from '@/components/notice-toast'
 
 type BibItem = {
   id: string
@@ -161,12 +162,7 @@ export default function StudentBibliographyPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [editingId])
 
-  /* Тост гаснет сам: удача — 4,5 с, ошибка — 7 с */
-  useEffect(() => {
-    if (!notice) return
-    const t = setTimeout(() => setNotice(null), notice.type === 'ok' ? 4500 : 7000)
-    return () => clearTimeout(t)
-  }, [notice])
+  /* Тост теперь внутри NoticeToast — таймер там же */
 
   /* ── Импорт ведомости CSV: разбор на клиенте, валидация на сервере ── */
   const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -618,34 +614,8 @@ export default function StudentBibliographyPage() {
         </div>
       )}
 
-      {/* ── Уведомление-тост: плавает поверх страницы, гаснет сам ── */}
-      {notice && (
-        <div className="fixed top-4 right-4 z-50 w-[min(26rem,calc(100vw-2rem))] animate-fade-up" aria-live="polite">
-          <div
-            className={`flex items-start gap-2.5 border px-4 py-3 shadow-[0_18px_44px_-20px_rgba(43,33,24,0.5)] ${
-              notice.type === 'ok'
-                ? 'border-[#B08D46]/70 bg-[#FAF5E8]'
-                : 'border-l-2 border-l-[#8C2F1B] border-red-200 bg-red-50'
-            }`}
-          >
-            {notice.type === 'ok' ? (
-              <CheckCircle2 className="w-4 h-4 text-[#8A6B2F] mt-0.5 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
-            )}
-            <p className={`text-sm flex-1 ${notice.type === 'ok' ? 'text-[#6E5A2A]' : 'text-red-800'}`}>
-              {notice.text}
-            </p>
-            <button
-              onClick={() => setNotice(null)}
-              title="Скрыть"
-              className="shrink-0 text-muted-foreground/50 hover:text-[#8C2F1B] transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ── Уведомление-тост (общая компонента) ── */}
+      <NoticeToast notice={notice} onClose={() => setNotice(null)} />
 
       {/* ── Нет утверждённой темы ── */}
       {cycle && !myApp && (
