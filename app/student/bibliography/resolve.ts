@@ -185,6 +185,13 @@ async function resolveIsbn(isbn: string): Promise<ResolvedSource> {
   const authors = joinAuthors((Array.isArray(b.authors) ? b.authors : []).map((a: any) => String(a.name ?? '')))
   const title = String(b.title ?? '').trim()
   const publisher = String(b.publishers?.[0]?.name ?? '').trim()
+
+  /* OpenLibrary — народный каталог, в нём встречается рекламный спам:
+     отбрасываем записи вида «Fomo App Referral Code», где название = издательству */
+  if (!title || title === publisher || /referral[\s-]?code|promo[\s-]?code|coupon|промокод/i.test(`${title} ${publisher}`)) {
+    throw new Error('Каталог вернул рекламную запись — проверьте ISBN или внесите книгу вручную')
+  }
+
   const year = String(b.publish_date ?? '').replace(/\D/g, '').slice(0, 4)
   const pages = b.number_of_pages ? String(b.number_of_pages) : ''
 

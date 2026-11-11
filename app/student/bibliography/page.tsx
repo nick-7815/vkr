@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Papa from 'papaparse'
-import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X, Search } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X, Search, ChevronDown } from 'lucide-react'
 import { addBibItem, updateBibItem, deleteBibItem, importBibItems } from './actions'
 import { resolveSourceRef } from './resolve'
 
@@ -161,6 +161,13 @@ export default function StudentBibliographyPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [editingId])
 
+  /* Тост гаснет сам: удача — 4,5 с, ошибка — 7 с */
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(null), notice.type === 'ok' ? 4500 : 7000)
+    return () => clearTimeout(t)
+  }, [notice])
+
   /* ── Импорт ведомости CSV: разбор на клиенте, валидация на сервере ── */
   const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -207,7 +214,10 @@ export default function StudentBibliographyPage() {
     const result = await resolveSourceRef(refQuery)
     setRefBusy(false)
     if (!result.success) {
-      setNotice({ type: 'err', text: result.error || 'Источник не найден' })
+      /* неудачный поиск не оставляет в полях данные прошлой находки */
+      setForm({ ...EMPTY_FORM })
+      setFormErrors({})
+      setNotice({ type: 'err', text: result.error || 'Не удалось распознать источник' })
       return
     }
     setForm({
@@ -608,23 +618,32 @@ export default function StudentBibliographyPage() {
         </div>
       )}
 
-      {/* ── Уведомление ── */}
+      {/* ── Уведомление-тост: плавает поверх страницы, гаснет сам ── */}
       {notice && (
-        <div
-          className={`flex items-start gap-2.5 border px-4 py-3 animate-fade-up ${
-            notice.type === 'ok'
-              ? 'border-[#B08D46]/60 bg-[#B08D46]/10'
-              : 'border-l-2 border-l-[#8C2F1B] border-red-200 bg-red-50'
-          }`}
-        >
-          {notice.type === 'ok' ? (
-            <CheckCircle2 className="w-4 h-4 text-[#8A6B2F] mt-0.5 shrink-0" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
-          )}
-          <p className={`text-sm ${notice.type === 'ok' ? 'text-[#6E5A2A]' : 'text-red-800'}`}>
-            {notice.text}
-          </p>
+        <div className="fixed top-4 right-4 z-50 w-[min(26rem,calc(100vw-2rem))] animate-fade-up" aria-live="polite">
+          <div
+            className={`flex items-start gap-2.5 border px-4 py-3 shadow-[0_18px_44px_-20px_rgba(43,33,24,0.5)] ${
+              notice.type === 'ok'
+                ? 'border-[#B08D46]/70 bg-[#FAF5E8]'
+                : 'border-l-2 border-l-[#8C2F1B] border-red-200 bg-red-50'
+            }`}
+          >
+            {notice.type === 'ok' ? (
+              <CheckCircle2 className="w-4 h-4 text-[#8A6B2F] mt-0.5 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-[#8C2F1B] mt-0.5 shrink-0" />
+            )}
+            <p className={`text-sm flex-1 ${notice.type === 'ok' ? 'text-[#6E5A2A]' : 'text-red-800'}`}>
+              {notice.text}
+            </p>
+            <button
+              onClick={() => setNotice(null)}
+              title="Скрыть"
+              className="shrink-0 text-muted-foreground/50 hover:text-[#8C2F1B] transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -710,6 +729,26 @@ export default function StudentBibliographyPage() {
                   <p className="text-xs font-quote italic text-muted-foreground mb-2">
                     Рефчекеръ: вставьте DOI, ISBN или ссылку — поля заполнятся сами
                   </p>
+                  <details className="mb-3 group/hint">
+                    <summary className="inline-flex items-center gap-1.5 text-xs font-quote italic text-[#8A6B2F] cursor-pointer select-none hover:text-[#8C2F1B] transition-colors list-none [&::-webkit-details-marker]:hidden">
+                      Что такое DOI, ISBN и ссылка?
+                      <ChevronDown className="w-3 h-3 shrink-0 transition-transform duration-300 group-open/hint:rotate-180" />
+                    </summary>
+                    <div className="mt-2 border border-border/70 bg-card px-3 py-2.5 space-y-1.5 text-xs text-muted-foreground leading-relaxed">
+                      <p>
+                        <b className="text-foreground">DOI</b> — цифровой идентификатор научной статьи, видъ: 10.1038/nature14539.
+                        Есть у большинства статей изъ eLIBRARY, КиберЛенинки и зарубежныхъ журналовъ — ищите на страницѣ статьи.
+                      </p>
+                      <p>
+                        <b className="text-foreground">ISBN</b> — номер книги, 10 или 13 цифръ, видъ: 978-5-…. Стоитъ на обороте
+                        титульного листа и на задней обложке.
+                      </p>
+                      <p>
+                        <b className="text-foreground">Ссылка</b> — адресъ страницы в интернете (https://…): сайты, официальные
+                        документы и статьи безъ DOI.
+                      </p>
+                    </div>
+                  </details>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="text"
@@ -740,6 +779,12 @@ export default function StudentBibliographyPage() {
                       {refBusy ? 'Ищется...' : 'Найти'}
                     </button>
                   </div>
+                  {refBusy && (
+                    <p className="mt-2 flex items-center gap-2 text-xs font-quote italic text-muted-foreground">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#8C2F1B]" />
+                      Тянемъ метаданные: DOI → Crossref, ISBN → книжные каталоги, ссылка → страница...
+                    </p>
+                  )}
                   {refGost && (
                     <p className="mt-3 text-sm font-quote italic text-[#6E5A2A] border-l-2 border-[#B08D46] pl-3 break-words">
                       По ГОСТ Р 7.0.5-2008: {refGost}
@@ -752,8 +797,8 @@ export default function StudentBibliographyPage() {
                 <div className="flex justify-end mt-5">
                   <button
                     onClick={saveItem}
-                    disabled={busy || !windowOpen}
-                    title={!windowOpen ? 'Окно закрыто' : undefined}
+                    disabled={busy || refBusy || !windowOpen}
+                    title={!windowOpen ? 'Окно закрыто' : refBusy ? 'Идёт поиск — подождите' : undefined}
                     className="border border-[#6E2415] bg-[#8C2F1B] text-[#F3EDDF] font-display text-[10px] uppercase tracking-[0.18em] px-5 py-2.5 transition-all duration-200 hover:bg-[#7A2715] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#8C2F1B]"
                   >
                     {busy ? 'Записывается...' : 'Добавить въ списокъ'}
