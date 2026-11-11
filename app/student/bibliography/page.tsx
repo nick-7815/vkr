@@ -769,25 +769,6 @@ export default function StudentBibliographyPage() {
                   <p className="font-display text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                     источниковъ: {items.length} · принято: {items.filter((i) => i.status === 'approved').length}
                   </p>
-                  <button
-                    onClick={removeAllItems}
-                    disabled={busyDeleteAll || items.length === 0 || items.every((i) => i.status === 'approved')}
-                    title={
-                      items.length === 0
-                        ? 'Списокъ пустъ'
-                        : items.every((i) => i.status === 'approved')
-                          ? 'Всѣ источники приняты наставникомъ — удаление закрыто'
-                          : 'Удалить всѣ непринятые источники (нажмите дважды)'
-                    }
-                    className={`inline-flex items-center gap-1.5 h-7 px-2.5 font-display text-[10px] uppercase tracking-[0.18em] border transition-all duration-200 active:scale-[0.98] ${
-                      armDeleteAll
-                        ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF] shadow-sm'
-                        : 'bg-card border-border text-muted-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B]'
-                    } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-muted-foreground`}
-                  >
-                    {busyDeleteAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                    {armDeleteAll ? 'точно удалить всѣ?' : 'удалить всѣ'}
-                  </button>
                 </div>
               </div>
             </div>
@@ -999,9 +980,30 @@ export default function StudentBibliographyPage() {
             <div className="relative border border-[#B08D46]/50 bg-card p-1.5 shadow-[0_1px_2px_rgba(43,33,24,0.06),0_18px_44px_-22px_rgba(43,33,24,0.3)] animate-fade-up [animation-delay:150ms]">
               <Corners />
               <div className="border border-border px-6 py-5">
-                <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground pb-3 border-b border-border mb-2">
-                  Вашъ списокъ литературы
-                </p>
+                <div className="flex items-center justify-between gap-4 pb-3 border-b border-border mb-2">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                    Вашъ списокъ литературы
+                  </p>
+                  <button
+                    onClick={removeAllItems}
+                    disabled={busyDeleteAll || items.length === 0 || items.every((i) => i.status === 'approved')}
+                    title={
+                      items.length === 0
+                        ? 'Списокъ пустъ'
+                        : items.every((i) => i.status === 'approved')
+                          ? 'Всѣ источники приняты наставникомъ — удаление закрыто'
+                          : 'Удалить всѣ непринятые источники (нажмите дважды)'
+                    }
+                    className={`inline-flex items-center gap-1.5 h-7 px-2.5 font-display text-[10px] uppercase tracking-[0.18em] border transition-all duration-200 active:scale-[0.98] shrink-0 ${
+                      armDeleteAll
+                        ? 'bg-[#8C2F1B] border-[#6E2415] text-[#F3EDDF] shadow-sm'
+                        : 'bg-card border-border text-muted-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B]'
+                    } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-muted-foreground`}
+                  >
+                    {busyDeleteAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    {armDeleteAll ? 'точно удалить всѣ?' : 'удалить всѣ'}
+                  </button>
+                </div>
 
                 {/* ── Шаг 3д: шлюз «Списокъ соответствуетъ требованиямъ?» ── */}
                 <div className="my-3 border border-border bg-[#FAF5E8]/60 px-4 py-3.5">
