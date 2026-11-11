@@ -219,6 +219,26 @@ export async function toggleBibCited(itemId: string, cited: boolean) {
   return { success: true }
 }
 
+/* ── Шаг 3д+: отметить/снять «есть ссылка в тексте» у всѣх источников разом ──
+   Явный фильтр по student_id (плюс RLS) — чужие строки не задеваются.
+   Доступно на любом статусе источников. */
+export async function setAllBibCited(cited: boolean) {
+  const userId = await requireStudent()
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('bibliography_items')
+    .update({ cited: Boolean(cited), updated_at: new Date().toISOString() })
+    .eq('student_id', userId)
+    .select('id')
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  return { success: true, count: data?.length ?? 0 }
+}
+
 /* ── Править свой источник (не принятый); после правки замечания — снова «на проверке» ── */
 export async function updateBibItem(data: BibFields & { itemId: string }) {
   await requireStudent()

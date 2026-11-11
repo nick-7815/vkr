@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Papa from 'papaparse'
 import { Loader2, CheckCircle2, AlertCircle, BookMarked, FileDown, Pencil, Trash2, X, Search, ChevronDown, Copy, Check, Quote, Square, CheckSquare } from 'lucide-react'
-import { addBibItem, updateBibItem, deleteBibItem, importBibItems, toggleBibCited } from './actions'
+import { addBibItem, updateBibItem, deleteBibItem, importBibItems, toggleBibCited, setAllBibCited } from './actions'
 import { resolveSourceRef } from './resolve'
 import NoticeToast from '@/components/notice-toast'
 import { buildGostLine } from '@/lib/gost'
@@ -146,6 +146,9 @@ export default function StudentBibliographyPage() {
   const importRef = useRef<HTMLDivElement>(null)
   const [importing, setImporting] = useState(false)
   const [importResults, setImportResults] = useState<{ success: number; errors: string[] } | null>(null)
+
+  // 3д+: массовая отметка «в текстѣ»
+  const [busyCitedAll, setBusyCitedAll] = useState(false)
 
   // рефчекер: автозаполнение по DOI / ISBN / ссылке
   const [refQuery, setRefQuery] = useState('')
@@ -461,6 +464,27 @@ export default function StudentBibliographyPage() {
       setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, cited: it.cited } : p)))
       setNotice({ type: 'err', text: res.error || 'Не удалось сохранить отметку' })
     }
+  }
+
+  /* 3д+: отметить/снять «въ текстѣ» у всѣх разом — оптимистично, откат при ошибке */
+  const setAllCited = async (next: boolean) => {
+    if (busyCitedAll || items.length === 0) return
+    const before = items
+    setBusyCitedAll(true)
+    setItems((prev) => prev.map((p) => ({ ...p, cited: next })))
+    const res = await setAllBibCited(next)
+    if (!res.success) {
+      setItems(before)
+      setNotice({ type: 'err', text: res.error || 'Не удалось сохранить отметки' })
+    } else {
+      setNotice({
+        type: 'ok',
+        text: next
+          ? `«Въ текстѣ» отмечено: ${res.count} изъ ${items.length}`
+          : `Отметки «въ текстѣ» сняты: ${res.count}`,
+      })
+    }
+    setBusyCitedAll(false)
   }
 
   const listAllowed = myApp && myApp.status !== 'submitted' && myApp.status !== 'in_order'
@@ -960,6 +984,24 @@ export default function StudentBibliographyPage() {
                       <span>
                         въ текстѣ: <b className={compliance.total > 0 && compliance.cited === compliance.total ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]'}>{compliance.cited}/{compliance.total}</b>
                       </span>
+                      <button
+                        onClick={() => setAllCited(true)}
+                        disabled={busyCitedAll || items.length === 0 || compliance.cited === compliance.total}
+                        className="inline-flex items-center gap-1 border border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F] px-2 py-0.5 hover:bg-[#B08D46]/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                        title="Отметить «въ текстѣ» у всѣх источников сразу"
+                      >
+                        {busyCitedAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckSquare className="w-3 h-3" />}
+                        всѣ въ текстѣ
+                      </button>
+                      <button
+                        onClick={() => setAllCited(false)}
+                        disabled={busyCitedAll || items.length === 0 || compliance.cited === 0}
+                        className="inline-flex items-center gap-1 border border-border text-muted-foreground px-2 py-0.5 hover:text-[#8A6B2F] hover:border-[#B08D46]/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                        title="Снять отметки «въ текстѣ» со всѣх источников"
+                      >
+                        <Square className="w-3 h-3" />
+                        снять всѣ
+                      </button>
                     </div>
                   </div>
                   {compliance.missing.length > 0 && (
