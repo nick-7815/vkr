@@ -490,11 +490,15 @@ export default function StudentBibliographyPage() {
     if (!res.success) {
       setItems(before)
       setNotice({ type: 'err', text: res.error || 'Не удалось сохранить отметки' })
+    } else if (res.count === 0) {
+      /* серверъ не обновилъ ни одной строки — не хвалимся успехомъ */
+      setItems(before)
+      setNotice({ type: 'err', text: 'Ни одинъ источник не отмеченъ — обнови страницу и попробуй ещё разъ' })
     } else {
       setNotice({
         type: 'ok',
         text: next
-          ? `Отмечено «есть ссылка въ дипломѣ»: ${res.count} изъ ${items.length}`
+          ? `Всѣ отмечены «есть ссылка въ дипломѣ»: ${res.count}`
           : `Отметки «есть ссылка въ дипломѣ» сняты: ${res.count}`,
       })
     }

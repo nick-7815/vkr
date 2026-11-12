@@ -189,28 +189,20 @@ export async function addBibItem(data: BibFields) {
   return { success: true }
 }
 
-/* ── Шаг 3д: отметить/снять «есть ссылка в тексте» ──
+/* ── Шаг 3д: отметить/снять «есть ссылка въ дипломѣ» ──
    Текст ВКР ведётся вне трекера, отметка — самоподтверждение студента.
-   Доступно на любом статусе источника (в т.ч. принятом наставником). */
+   Идёт черезъ RPC — доступна на любом статусе источника (въ т.ч. принятомъ). */
 export async function toggleBibCited(itemId: string, cited: boolean) {
   await requireStudent()
   const supabase = await createClient()
 
-  const { data: item } = await supabase
-    .from('bibliography_items')
-    .select('id')
-    .eq('id', itemId)
-    .limit(1)
-    .maybeSingle()
-
-  if (!item) {
-    return { success: false, error: 'Источник не найден' }
-  }
-
-  const { error } = await supabase
-    .from('bibliography_items')
-    .update({ cited: Boolean(cited), updated_at: new Date().toISOString() })
-    .eq('id', itemId)
+  /* отметка идёт черезъ RPC: RLS запрещает менять содержимое принятыхъ
+     (approved) источниковъ, а «есть ссылка въ дипломѣ» — личный чек-лист
+     студента по всѣмъ СВОИМЪ строкамъ; RPC самъ проверяет владельца */
+  const { error } = await supabase.rpc('bib_set_cited', {
+    p_item: itemId,
+    p_cited: Boolean(cited),
+  })
 
   if (error) {
     return { success: false, error: error.message }
@@ -219,24 +211,23 @@ export async function toggleBibCited(itemId: string, cited: boolean) {
   return { success: true }
 }
 
-/* ── Шаг 3д+: отметить/снять «есть ссылка в тексте» у всѣх источников разом ──
-   Явный фильтр по student_id (плюс RLS) — чужие строки не задеваются.
-   Доступно на любом статусе источников. */
+/* ── Шаг 3д+: отметить/снять «есть ссылка въ дипломѣ» у всѣх источниковъ разом ──
+   Идёт черезъ RPC bib_set_all_cited: RLS не даёт менять принятые строки,
+   а отметка — личный чек-лист по всѣмъ СВОИМЪ источникамъ; RPC самъ
+   проверяет владельца и возвращает точное число обновлённых строк. */
 export async function setAllBibCited(cited: boolean) {
-  const userId = await requireStudent()
+  await requireStudent()
   const supabase = await createClient()
 
-  const { data, error } = await supabase
-    .from('bibliography_items')
-    .update({ cited: Boolean(cited), updated_at: new Date().toISOString() })
-    .eq('student_id', userId)
-    .select('id')
+  const { data, error } = await supabase.rpc('bib_set_all_cited', {
+    p_cited: Boolean(cited),
+  })
 
   if (error) {
     return { success: false, error: error.message }
   }
 
-  return { success: true, count: data?.length ?? 0 }
+  return { success: true, count: typeof data === 'number' ? data : 0 }
 }
 
 /* ── Править свой источник (не принятый); после правки замечания — снова «на проверке» ── */
