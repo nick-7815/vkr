@@ -403,7 +403,7 @@ export default function SupervisorBibliographyPage() {
                               </span>
                             ))}
                             <span className={comp.total > 0 && comp.cited === comp.total ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]/70'}>
-                              въ текстѣ {comp.cited}/{comp.total}
+                              есть ссылка въ дипломѣ {comp.cited}/{comp.total}
                             </span>
                             {comp.ok && (
                               <span className="font-display text-[9px] uppercase tracking-[0.18em] text-[#8A6B2F] border border-[#B08D46]/60 bg-[#B08D46]/10 px-2 py-0.5">
@@ -435,7 +435,7 @@ export default function SupervisorBibliographyPage() {
                                   )}
                                   {it.cited && (
                                     <span className="text-xs font-quote text-[#8A6B2F]/80">
-                                      въ текстѣ ✓
+                                      есть ссылка въ дипломѣ ✓
                                     </span>
                                   )}
                                   {it.url && (

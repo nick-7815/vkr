@@ -73,7 +73,7 @@ export function computeCompliance(items: ComplianceItem[]): Compliance {
     if (!byOrigin[r.key]) missing.push(`нетъ ни одного источника изъ «${r.label}» — ${r.hint}`)
   }
   if (total > 0 && cited < total) {
-    missing.push(`у ${total - cited} изъ ${total} не отмечено «въ текстѣ» — ставь галочку, когда вставишь ссылку [N] въ текстъ главы`)
+    missing.push(`у ${total - cited} изъ ${total} нетъ ссылки въ дипломѣ — поставь галочку, когда добавишь ссылку [N] на источникъ въ текстъ диплома`)
   }
 
   return {

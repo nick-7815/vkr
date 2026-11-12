@@ -469,7 +469,7 @@ export default function StudentBibliographyPage() {
     [items]
   )
 
-  /* отметка «есть ссылка въ текстѣ» — оптимистично, откат при ошибке */
+  /* отметка «есть ссылка въ дипломѣ» — оптимистично, откат при ошибке */
   const toggleCited = async (it: BibItem) => {
     const next = !it.cited
     setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, cited: next } : p)))
@@ -480,7 +480,7 @@ export default function StudentBibliographyPage() {
     }
   }
 
-  /* 3д+: отметить/снять «въ текстѣ» у всѣх разом — оптимистично, откат при ошибке */
+  /* 3д+: отметить/снять «есть ссылка въ дипломѣ» у всѣх разом — оптимистично, откат при ошибке */
   const setAllCited = async (next: boolean) => {
     if (busyCitedAll || items.length === 0) return
     const before = items
@@ -494,8 +494,8 @@ export default function StudentBibliographyPage() {
       setNotice({
         type: 'ok',
         text: next
-          ? `«Въ текстѣ» отмечено: ${res.count} изъ ${items.length}`
-          : `Отметки «въ текстѣ» сняты: ${res.count}`,
+          ? `Отмечено «есть ссылка въ дипломѣ»: ${res.count} изъ ${items.length}`
+          : `Отметки «есть ссылка въ дипломѣ» сняты: ${res.count}`,
       })
     }
     setBusyCitedAll(false)
@@ -1042,22 +1042,22 @@ export default function StudentBibliographyPage() {
                         </b>
                       </span>
                       <span>
-                        въ текстѣ: <b className={compliance.total > 0 && compliance.cited === compliance.total ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]'}>{compliance.cited}/{compliance.total}</b>
+                        есть ссылка въ дипломѣ: <b className={compliance.total > 0 && compliance.cited === compliance.total ? 'text-[#8A6B2F]' : 'text-[#8C2F1B]'}>{compliance.cited}/{compliance.total}</b>
                       </span>
                       <button
                         onClick={() => setAllCited(true)}
                         disabled={busyCitedAll || items.length === 0 || compliance.cited === compliance.total}
                         className="inline-flex items-center gap-1 border border-[#B08D46]/60 bg-[#B08D46]/10 text-[#8A6B2F] px-2 py-0.5 hover:bg-[#B08D46]/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                        title="Отметить «въ текстѣ» у всѣх источников сразу"
+                        title="Отметить «есть ссылка въ дипломѣ» у всѣх источников сразу"
                       >
                         {busyCitedAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckSquare className="w-3 h-3" />}
-                        всѣ въ текстѣ
+                        всѣ съ ссылкой
                       </button>
                       <button
                         onClick={() => setAllCited(false)}
                         disabled={busyCitedAll || items.length === 0 || compliance.cited === 0}
                         className="inline-flex items-center gap-1 border border-border text-muted-foreground px-2 py-0.5 hover:text-[#8A6B2F] hover:border-[#B08D46]/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                        title="Снять отметки «въ текстѣ» со всѣх источников"
+                        title="Снять отметки «есть ссылка въ дипломѣ» со всѣх источников"
                       >
                         <Square className="w-3 h-3" />
                         снять всѣ
@@ -1126,13 +1126,13 @@ export default function StudentBibliographyPage() {
                             )}
                             <button
                               onClick={() => toggleCited(it)}
-                              title="Есть ссылка на источникъ въ текстѣ работы? (шлюзъ регламента)"
+                              title="Отметь, когда добавишь ссылку [N] на источникъ въ текстъ диплома (шлюзъ регламента)"
                               className={`inline-flex items-center gap-1 text-xs font-quote transition-colors ${
                                 it.cited ? 'text-[#8A6B2F]' : 'text-muted-foreground/60 hover:text-[#8A6B2F]'
                               }`}
                             >
                               {it.cited ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
-                              въ текстѣ
+                              есть ссылка въ дипломѣ
                             </button>
                             {it.url && (
                               <a
