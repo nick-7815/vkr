@@ -158,6 +158,8 @@ export default function StudentBibliographyPage() {
   const [refQuery, setRefQuery] = useState('')
   const [refBusy, setRefBusy] = useState(false)
   const [refGost, setRefGost] = useState<string | null>(null)
+  // подсказка «Что такое DOI, ISBN и ссылка?» — плавное раскрытие
+  const [hintOpen, setHintOpen] = useState(false)
 
   // копирование ГОСТ-строки источника въ буферъ
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -825,26 +827,33 @@ export default function StudentBibliographyPage() {
                   <p className="text-xs font-quote italic text-muted-foreground mb-2">
                     Рефчекеръ: вставьте DOI, ISBN или ссылку — поля заполнятся сами
                   </p>
-                  <details className="mb-3 group/hint">
-                    <summary className="inline-flex items-center gap-1.5 text-xs font-quote italic text-[#8A6B2F] cursor-pointer select-none hover:text-[#8C2F1B] transition-colors list-none [&::-webkit-details-marker]:hidden">
+                  <div className="mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setHintOpen((v) => !v)}
+                      aria-expanded={hintOpen}
+                      className="inline-flex items-center gap-1.5 text-xs font-quote italic text-[#8A6B2F] cursor-pointer select-none hover:text-[#8C2F1B] transition-colors"
+                    >
                       Что такое DOI, ISBN и ссылка?
-                      <ChevronDown className="w-3 h-3 shrink-0 transition-transform duration-300 group-open/hint:rotate-180" />
-                    </summary>
-                    <div className="mt-2 border border-border/70 bg-card px-3 py-2.5 space-y-1.5 text-xs text-muted-foreground leading-relaxed">
-                      <p>
-                        <b className="text-foreground">DOI</b> — цифровой идентификатор научной статьи, видъ: 10.1038/nature14539.
-                        Есть у большинства статей изъ eLIBRARY, КиберЛенинки и зарубежныхъ журналовъ — ищите на страницѣ статьи.
-                      </p>
-                      <p>
-                        <b className="text-foreground">ISBN</b> — номер книги, 10 или 13 цифръ, видъ: 978-5-…. Стоитъ на обороте
-                        титульного листа и на задней обложке.
-                      </p>
-                      <p>
-                        <b className="text-foreground">Ссылка</b> — адресъ страницы в интернете (https://…): сайты, официальные
-                        документы и статьи безъ DOI.
-                      </p>
-                    </div>
-                  </details>
+                      <ChevronDown className={`w-3 h-3 shrink-0 transition-transform duration-300 ${hintOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    <Collapse open={hintOpen}>
+                      <div className="mt-2 border border-border/70 bg-card px-3 py-2.5 space-y-1.5 text-xs text-muted-foreground leading-relaxed">
+                        <p>
+                          <b className="text-foreground">DOI</b> — цифровой идентификатор научной статьи, видъ: 10.1038/nature14539.
+                          Есть у большинства статей изъ eLIBRARY, КиберЛенинки и зарубежныхъ журналовъ — ищите на страницѣ статьи.
+                        </p>
+                        <p>
+                          <b className="text-foreground">ISBN</b> — номер книги, 10 или 13 цифръ, видъ: 978-5-…. Стоитъ на обороте
+                          титульного листа и на задней обложке.
+                        </p>
+                        <p>
+                          <b className="text-foreground">Ссылка</b> — адресъ страницы в интернете (https://…): сайты, официальные
+                          документы и статьи безъ DOI.
+                        </p>
+                      </div>
+                    </Collapse>
+                  </div>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="text"
