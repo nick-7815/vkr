@@ -226,6 +226,26 @@ export default async function DashboardPage() {
     windows = res.data
   }
 
+  /* ── Шаг 4: просмотры студента — рецензенты и результаты ── */
+  type ScreeningRow = {
+    id: string
+    screening_no: number
+    grade: number | null
+    comment: string | null
+    contact: string | null
+    status: string
+    reviewer: { full_name: string } | null
+  }
+  let screenings: ScreeningRow[] = []
+  if (role === 'student' && activeCycle && studentApp) {
+    const res = await supabase
+      .from('screening_assignments')
+      .select('id, screening_no, grade, comment, contact, status, reviewer:profiles!screening_assignments_supervisor_id_fkey(full_name)')
+      .eq('student_id', user.id)
+      .eq('cycle_id', activeCycle.id)
+    screenings = (res.data as unknown as ScreeningRow[]) ?? []
+  }
+
   // ── Строки реестра по ролям ──
   const isDeputy = role === 'deputy' || role === 'head'
   const isSecretary = role === 'secretary'
@@ -384,6 +404,54 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Шаг 4: просмотры студента — рецензенты и результаты ── */}
+      {role === 'student' && screenings.length > 0 && (
+        <div className="border border-border bg-card px-6 py-5 animate-fade-up [animation-delay:360ms]">
+          <p className="font-display text-[10px] tracking-[0.3em] text-muted-foreground mb-2">
+            ПРОСМОТРЫ · РЕЦЕНЗЕНТЫ
+          </p>
+          {[1, 2].map((no) => {
+            const rows = screenings.filter((s) => s.screening_no === no)
+            if (rows.length === 0) return null
+            const win = windows?.find((w) => w.stage === `screening${no}`)
+            const todayIso = new Date().toLocaleDateString('sv-SE')
+            const late = !!win && win.ends_on < todayIso && rows.some((r) => r.status !== 'done')
+            return (
+              <div key={no} className="py-3 border-b border-border/60 last:border-0">
+                <div className="flex items-end gap-2">
+                  <span className="text-sm text-foreground/85 shrink-0">Просмотръ №{no}</span>
+                  <span className="flex-1 border-b-2 border-dotted border-[#B08D46]/45 mb-1.5" aria-hidden />
+                  {win && (
+                    <span className="font-display text-sm text-right whitespace-nowrap">
+                      {fmt(win.starts_on)} — {fmt(win.ends_on)}
+                    </span>
+                  )}
+                </div>
+                {late && (
+                  <p className="mt-1.5 text-[10px] text-[#8C2F1B] font-display uppercase tracking-[0.12em]">
+                    окно закрылось безъ оценки — просрочка
+                  </p>
+                )}
+                <div className="mt-2 grid sm:grid-cols-2 gap-2">
+                  {rows.map((r) => (
+                    <div key={r.id} className="border border-[#B08D46]/40 px-3 py-2 bg-background/40">
+                      <p className="font-quote text-sm font-bold">{r.reviewer?.full_name ?? '—'}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {r.status === 'done' && r.grade != null
+                          ? `Оценка: ${r.grade}`
+                          : 'Оценка ещё не выставлена'}
+                        {r.contact ? ` · Контактъ: ${r.contact}` : ''}
+                      </p>
+                      {r.comment && <p className="text-xs italic mt-1 text-foreground/75">{r.comment}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* ── Маршрутъ: линейка этапов со штемпелем ── */}
       <div className="border border-border bg-card px-6 py-5 animate-fade-up [animation-delay:400ms]">

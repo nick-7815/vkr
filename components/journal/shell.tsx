@@ -6,7 +6,6 @@ import LogoutButton from '@/components/logout-button'
 const ROLE_LABELS: Record<string, string> = {
   student: 'Студентъ',
   supervisor: 'Наставникъ',
-  reviewer: 'Рецензентъ',
   secretary: 'Секретарь',
   head: 'Заведующий кафедрой',
   deputy: 'Зам. заведующего',
@@ -42,6 +41,11 @@ export default async function JournalShell({
   const role = profile.role || 'student'
   const fullName = profile.full_name || user.email || ''
 
+  /* Шаг 4: «просмотры преподавателей» — отдельной роли нет.
+     Меню у всех преподавателей-наставников одно и то же: «Просмотры» —
+     новый раздел; у кого нет карточек, увидит там, что канцелярия ещё
+     не назначила его рецензентом. Остальное не тронуто. */
+
   const menuItems = [
     { href: '/dashboard', label: 'Дашбордъ' },
     ...(role === 'deputy'
@@ -49,12 +53,14 @@ export default async function JournalShell({
           { href: '/admin/users', label: 'Пользователи' },
           { href: '/supervisor/topics', label: 'Темы ВКР' },
           { href: '/deputy/cycles', label: 'Даты' },
+          { href: '/deputy/screenings', label: 'Просмотры' },
         ]
       : []),
     ...(role === 'supervisor'
       ? [
           { href: '/supervisor/topics', label: 'Мои темы' },
           { href: '/supervisor/bibliography', label: 'Литература' },
+          { href: '/supervisor/screenings', label: 'Просмотры' },
         ]
       : []),
 
@@ -62,6 +68,7 @@ export default async function JournalShell({
       ? [
           { href: '/secretary/orders', label: 'Приказы' },
           { href: '/secretary/cycles', label: 'Циклы' },
+          { href: '/secretary/screenings', label: 'Просмотры' },
         ]
       : []),
     ...(role === 'student'
