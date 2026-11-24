@@ -126,6 +126,16 @@ export default function ScreeningAdmin() {
     loadAll()
   }, [])
 
+  // Esc закрывает модальное подтверждение «убрать всѣ»
+  useEffect(() => {
+    if (!confirmClear) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setConfirmClear(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [confirmClear])
+
   const today = localToday()
 
   const windowLate = (no: number) => {
@@ -209,37 +219,15 @@ export default function ScreeningAdmin() {
                 {busy === 'shuffle' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shuffle className="w-3.5 h-3.5" />}
                 шаффлъ
               </button>
-              {confirmClear ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className="text-xs text-[#8C2F1B]">убрать всѣ?</span>
-                  <button
-                    onClick={() => {
-                      setConfirmClear(false)
-                      run('clear', () => clearCycle(cycle.id), loadAll)
-                    }}
-                    disabled={busy !== ''}
-                    className="h-8 px-3 font-display text-[10px] uppercase tracking-[0.18em] border border-[#8C2F1B] bg-[#8C2F1B]/10 text-[#8C2F1B]"
-                  >
-                    да
-                  </button>
-                  <button
-                    onClick={() => setConfirmClear(false)}
-                    className="h-8 px-3 font-display text-[10px] uppercase tracking-[0.18em] border border-border bg-card text-muted-foreground"
-                  >
-                    отмена
-                  </button>
-                </span>
-              ) : (
-                <button
-                  onClick={() => setConfirmClear(true)}
-                  disabled={busy !== '' || assignments.length === 0}
-                  title="Убрать все назначения цикла"
-                  className="inline-flex items-center gap-1.5 h-8 px-3 font-display text-[10px] uppercase tracking-[0.18em] border bg-card border-border text-muted-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  убрать всѣ
-                </button>
-              )}
+              <button
+                onClick={() => setConfirmClear(true)}
+                disabled={busy !== '' || assignments.length === 0}
+                title="Убрать все назначения цикла"
+                className="inline-flex items-center gap-1.5 h-8 px-3 font-display text-[10px] uppercase tracking-[0.18em] border bg-card border-border text-muted-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                убрать всѣ
+              </button>
             </div>
           </div>
 
@@ -378,6 +366,52 @@ export default function ScreeningAdmin() {
           )}
         </div>
       </div>
+
+      {/* ── Модальное подтверждение «убрать всѣ» ── */}
+      {confirmClear && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#2B2118]/45 backdrop-blur-[2px] animate-fade-in p-4"
+          onClick={() => setConfirmClear(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-[420px] border border-[#B08D46]/50 bg-card p-1.5 shadow-[0_1px_2px_rgba(43,33,24,0.1),0_28px_64px_-24px_rgba(43,33,24,0.45)] animate-fade-up"
+          >
+            <Corners />
+            <div className="border border-border px-7 py-6 text-center">
+              <p className="font-display text-xs font-bold uppercase tracking-[0.24em] text-[#8C2F1B]">
+                убрать всѣ назначенія?
+              </p>
+              <p className="font-quote italic text-sm text-muted-foreground mt-3 leading-relaxed">
+                Будутъ сняты всѣ рецензенты цикла «{cycle.name}» — всего назначеній: {assignments.length}.
+                Дѣйствіе нельзя отменить, но можно разложить заново шаффломъ.
+              </p>
+              <div className="flex items-center justify-center gap-2 mt-5">
+                <button
+                  onClick={() => {
+                    setConfirmClear(false)
+                    run('clear', () => clearCycle(cycle.id), loadAll)
+                  }}
+                  disabled={busy !== ''}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 font-display text-[10px] uppercase tracking-[0.18em] border border-[#6E2415] bg-[#8C2F1B] text-[#F3EDDF] transition-all duration-200 hover:bg-[#7A2715] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {busy === 'clear' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  да, убрать всѣ
+                </button>
+                <button
+                  onClick={() => setConfirmClear(false)}
+                  disabled={busy !== ''}
+                  className="h-8 px-3 font-display text-[10px] uppercase tracking-[0.18em] border border-border bg-card text-muted-foreground hover:border-[#8C2F1B] hover:text-[#8C2F1B] transition-all duration-200 disabled:opacity-40"
+                >
+                  отмена
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
