@@ -8,7 +8,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, Shuffle, Trash2, X } from 'lucide-react'
+import { Loader2, Plus, Shuffle, Trash2, X } from 'lucide-react'
 import { shuffleReviewers, setSlot, removeAssignment, clearCycle } from '@/lib/screening-actions'
 import NoticeToast, { type Notice } from '@/components/notice-toast'
 
@@ -304,50 +304,67 @@ export default function ScreeningAdmin() {
                                 </span>
                               )}
                               <div className="space-y-1.5">
-                                {rows.map((r, i) => (
-                                  <span
-                                    key={r.id}
-                                    className="flex items-center gap-1.5 animate-fade-up"
-                                    style={{ animationDelay: `${i * 90}ms` }}
-                                  >
+                                {[0, 1].map((slot) => {
+                                  const r = rows[slot]
+                                  if (r) {
+                                    const name = teachers.find((t) => t.id === r.supervisor_id)?.full_name ?? '—'
+                                    return (
+                                      <span
+                                        key={r.id}
+                                        className="flex items-center gap-1.5 animate-fade-up"
+                                        style={{ animationDelay: `${slot * 90}ms` }}
+                                      >
+                                        <span
+                                          className={`w-[190px] min-h-[28px] inline-flex items-center gap-1 px-2 py-1 text-xs border leading-tight ${
+                                            r.status === 'done'
+                                              ? 'border-[#4A6B3A]/50 bg-[#4A6B3A]/10 text-[#3E5A30]'
+                                              : 'border-[#B08D46]/60 bg-card text-foreground/80'
+                                          }`}
+                                        >
+                                          <span className="truncate" title={name}>{name}</span>
+                                          {r.status === 'done' && r.grade != null && <b className="shrink-0">· {r.grade}</b>}
+                                        </span>
+                                        <button
+                                          onClick={() => run(`del-${r.id}`, () => removeAssignment(r.id), loadAll)}
+                                          disabled={busy !== ''}
+                                          title="Снять рецензента"
+                                          className="w-7 h-7 shrink-0 inline-flex items-center justify-center border border-border/70 bg-card text-muted-foreground transition-colors duration-200 hover:border-[#8C2F1B] hover:text-[#8C2F1B] disabled:opacity-40"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </span>
+                                    )
+                                  }
+                                  return (
                                     <span
-                                      className={`inline-flex items-center gap-1 px-2 py-1 text-xs border ${
-                                        r.status === 'done'
-                                          ? 'border-[#4A6B3A]/50 bg-[#4A6B3A]/10 text-[#3E5A30]'
-                                          : 'border-[#B08D46]/60 bg-card text-foreground/80'
-                                      }`}
+                                      key={`empty-${slot}`}
+                                      className="flex items-center gap-1.5 animate-fade-in"
+                                      style={{ animationDelay: `${slot * 90}ms` }}
                                     >
-                                      {teachers.find((t) => t.id === r.supervisor_id)?.full_name ?? '—'}
-                                      {r.status === 'done' && r.grade != null && <b>· {r.grade}</b>}
+                                      <select
+                                        value=""
+                                        onChange={(e) => {
+                                          const id = e.target.value
+                                          if (id) run(`set-${a.student_id}-${no}`, () => setSlot(cycle.id, a.student_id, no, id), loadAll)
+                                        }}
+                                        disabled={busy !== '' || selectable.length === 0}
+                                        title={selectable.length === 0 ? 'Свободных наставников нет' : 'Назначить рецензента'}
+                                        className="w-[190px] h-7 text-xs border border-dashed border-[#B08D46]/60 bg-card px-2 text-muted-foreground disabled:opacity-40"
+                                      >
+                                        <option value="">+ рецензентъ…</option>
+                                        {selectable.map((t) => (
+                                          <option key={t.id} value={t.id}>{t.full_name}</option>
+                                        ))}
+                                      </select>
+                                      <span
+                                        title="Свободный слотъ"
+                                        className="w-7 h-7 shrink-0 inline-flex items-center justify-center border border-dashed border-[#B08D46]/40 text-muted-foreground/50"
+                                      >
+                                        <Plus className="w-3 h-3" />
+                                      </span>
                                     </span>
-                                    <button
-                                      onClick={() => run(`del-${r.id}`, () => removeAssignment(r.id), loadAll)}
-                                      disabled={busy !== ''}
-                                      title="Снять рецензента"
-                                      className="p-1 text-muted-foreground hover:text-[#8C2F1B] disabled:opacity-40"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </span>
-                                ))}
-                                {rows.length < 2 && (
-                                  <select
-                                    value=""
-                                    onChange={(e) => {
-                                      const id = e.target.value
-                                      if (id) run(`set-${a.student_id}-${no}`, () => setSlot(cycle.id, a.student_id, no, id), loadAll)
-                                    }}
-                                    disabled={busy !== '' || selectable.length === 0}
-                                    title={selectable.length === 0 ? 'Свободных наставников нет' : 'Назначить рецензента'}
-                                    className="w-[190px] h-7 text-xs border border-dashed border-[#B08D46]/60 bg-card px-2 text-muted-foreground disabled:opacity-40 animate-fade-in"
-                                    style={{ animationDelay: `${rows.length * 90}ms` }}
-                                  >
-                                    <option value="">+ рецензентъ…</option>
-                                    {selectable.map((t) => (
-                                      <option key={t.id} value={t.id}>{t.full_name}</option>
-                                    ))}
-                                  </select>
-                                )}
+                                  )
+                                })}
                               </div>
                             </td>
                           )
